@@ -1,8 +1,8 @@
 # Mission Ops Lite
 
-Mission Ops Lite is a public portfolio project for mission-data / operations-policy simulation.
+Mission Ops Lite is a lightweight backend for public satellite orbit data ingestion, derived position estimates, and operations-planning workflows.
 
-The current backend ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, and exposes bounded catalog/detail APIs. It can also derive an approximate satellite position for a requested timestamp using SGP4 and public orbit elements.
+The current backend ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, and exposes bounded catalog/detail APIs. It can also derive approximate satellite positions and ground-station contact windows for requested timestamps using SGP4 and public orbit elements.
 
 ## What this is
 
@@ -10,12 +10,14 @@ The current backend ingests public CelesTrak active GP orbit metadata, normalize
 - A public satellite/orbit catalog ingestion service using CelesTrak GP JSON.
 - A timestamp-lineage demonstration that separates source event time from ingestion time.
 - An SGP4-derived approximate position API from public orbit elements.
+- A ground-station visibility/contact-window planning API derived from approximate positions.
 - A foundation for later simulated telemetry and operations-policy comparison.
 
 ## What this is not
 
 - No live spacecraft connection.
 - No RF/downlink processing.
+- No RF link-budget, antenna scheduling, terrain masking, or weather modeling.
 - No telecommand capability.
 - Not flight software.
 - No mission-grade validation claim.
@@ -25,7 +27,7 @@ The current backend ingests public CelesTrak active GP orbit metadata, normalize
 
 ## Data lineage labels
 
-The catalog uses `real_public_orbit_data` from CelesTrak. Position output is derived from those public orbit elements, not directly measured live position or spacecraft telemetry.
+The catalog uses `real_public_orbit_data` from CelesTrak. Position and contact-window outputs are derived from those public orbit elements, not directly measured live position or spacecraft telemetry.
 
 Timestamp fields:
 
@@ -106,6 +108,38 @@ Example:
 curl 'http://127.0.0.1:8000/satellites/25544/position?at=2026-05-28T03:00:00Z'
 ```
 
+### `GET /satellites/{norad_cat_id}/contact-windows?...`
+
+Returns approximate ground-station visibility/contact windows over a requested planning range.
+
+Required query parameters:
+
+- `latitude_deg`: ground-station latitude, from `-90` to `90`.
+- `longitude_deg`: ground-station longitude, from `-180` to `180`.
+- `start`: ISO-8601 start timestamp.
+- `end`: ISO-8601 end timestamp.
+
+Optional query parameters:
+
+- `ground_station_name`: display name, default `Ground station`.
+- `altitude_m`: ground-station altitude in meters, default `0`.
+- `step_seconds`: sampling interval from `10` to `600`, default `60`.
+- `min_elevation_deg`: minimum visibility elevation from `0` to `90`, default `10`.
+
+Important framing:
+
+- This is a planning aid derived from public orbit elements and approximate SGP4 positions.
+- The endpoint reads the currently loaded latest catalog record for the requested NORAD ID. On the default server, that latest catalog is restored from SQLite at startup and refreshed by `POST /ingest/celestrak` subject to the 2-hour cache policy.
+- Contact windows are sampled estimates; finer `step_seconds` values can improve timing granularity at higher compute cost.
+- The response does not model RF link budget, antenna masks, terrain, weather, scheduling conflicts, or operational validation.
+- Requests are read-only and do not store derived contact-window outputs in SQLite.
+
+Example:
+
+```bash
+curl 'http://127.0.0.1:8000/satellites/25544/contact-windows?ground_station_name=Pacific%20demo%20station&latitude_deg=8.45&longitude_deg=-106.20&altitude_m=0&start=2026-05-28T02:45:00Z&end=2026-05-28T03:20:00Z&step_seconds=30&min_elevation_deg=10'
+```
+
 ### `GET /ingestion-runs`
 
 Returns recent ingestion attempts from SQLite, including source URL, status, record count, and error details when available.
@@ -151,6 +185,7 @@ curl http://127.0.0.1:8000/satellites
 curl http://127.0.0.1:8000/satellites/25544
 curl 'http://127.0.0.1:8000/satellites/25544?include_raw=true'
 curl 'http://127.0.0.1:8000/satellites/25544/position?at=2026-05-28T03:00:00Z'
+curl 'http://127.0.0.1:8000/satellites/25544/contact-windows?latitude_deg=8.45&longitude_deg=-106.20&start=2026-05-28T02:45:00Z&end=2026-05-28T03:20:00Z'
 ```
 
 ## Test strategy
@@ -163,3 +198,4 @@ The tests mock the CelesTrak HTTP response through `httpx.MockTransport`, so the
 - EPOCH age and `fresh` / `stale` / `unknown` statuses.
 - API response bounds so raw records are not exposed by default.
 - SGP4-derived approximate position metadata, missing-satellite handling, and insufficient-orbit-element handling.
+- Ground-station contact-window responses, empty-window handling, invalid time ranges, and missing-satellite handling.

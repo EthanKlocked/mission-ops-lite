@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, cast
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 
 from .catalog import SatelliteCatalog
 from .celestrak import CelesTrakClient
-from .models import SatelliteListResponse, SatelliteOrbitRecord, SatellitePositionResponse, SatelliteResponse
+from .contact_windows import (
+    ContactWindowInputError,
+    GroundStation,
+    estimate_contact_windows,
+    parse_contact_window_bounds,
+)
+from .models import (
+    ContactWindowListResponse,
+    ContactWindowResponse,
+    FreshnessStatus,
+    GroundStationResponse,
+    SatelliteListResponse,
+    SatelliteOrbitRecord,
+    SatellitePositionResponse,
+    SatelliteResponse,
+)
 from .propagation import (
     PropagationInputError,
     PropagationRuntimeError,
@@ -146,6 +161,80 @@ def create_app(
                 "Not live spacecraft telemetry",
                 "Not real-time spacecraft tracking",
                 "Not mission-grade flight dynamics validation",
+            ],
+        )
+
+    @app.get(
+        "/satellites/{norad_cat_id}/contact-windows",
+        response_model=ContactWindowListResponse,
+        response_model_exclude_none=True,
+    )
+    def get_contact_windows(
+        norad_cat_id: int,
+        latitude_deg: float = Query(ge=-90, le=90),
+        longitude_deg: float = Query(ge=-180, le=180),
+        start: str = Query(description="ISO-8601 start timestamp for the planning range"),
+        end: str = Query(description="ISO-8601 end timestamp for the planning range"),
+        ground_station_name: str = Query(default="Ground station"),
+        altitude_m: float = Query(default=0.0, ge=-500.0, le=10000.0),
+        step_seconds: int = Query(default=60, ge=10, le=600),
+        min_elevation_deg: float = Query(default=10.0, ge=0.0, le=90.0),
+    ) -> ContactWindowListResponse:
+        record = app.state.catalog.get_satellite(norad_cat_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Satellite not found")
+        try:
+            parsed_start, parsed_end = parse_contact_window_bounds(start, end)
+            estimate = estimate_contact_windows(
+                record,
+                ground_station=GroundStation(
+                    name=ground_station_name,
+                    latitude_deg=latitude_deg,
+                    longitude_deg=longitude_deg,
+                    altitude_m=altitude_m,
+                ),
+                start=parsed_start,
+                end=parsed_end,
+                step_seconds=step_seconds,
+                min_elevation_deg=min_elevation_deg,
+            )
+        except (ContactWindowInputError, PropagationInputError, PropagationRuntimeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return ContactWindowListResponse(
+            object_name=estimate.object_name,
+            norad_cat_id=estimate.norad_cat_id,
+            source=record.source,
+            source_epoch=estimate.source_epoch,
+            start=estimate.start,
+            end=estimate.end,
+            ground_station=GroundStationResponse(
+                name=estimate.ground_station.name,
+                latitude_deg=estimate.ground_station.latitude_deg,
+                longitude_deg=estimate.ground_station.longitude_deg,
+                altitude_m=estimate.ground_station.altitude_m,
+            ),
+            min_elevation_deg=estimate.min_elevation_deg,
+            step_seconds=estimate.step_seconds,
+            freshness_status=cast(FreshnessStatus, estimate.freshness_status),
+            epoch_age_hours=estimate.epoch_age_hours,
+            count=len(estimate.windows),
+            windows=[
+                ContactWindowResponse(
+                    start=window.start,
+                    end=window.end,
+                    peak_at=window.peak_at,
+                    duration_seconds=window.duration_seconds,
+                    max_elevation_deg=window.max_elevation_deg,
+                )
+                for window in estimate.windows
+            ],
+            limitations=[
+                "SGP4-derived approximate visibility from public orbit elements.",
+                "Not live spacecraft telemetry",
+                "Not real-time spacecraft tracking",
+                "Not mission-grade contact validation",
+                "No RF link budget, antenna mask, terrain, weather, or scheduling constraints",
             ],
         )
 

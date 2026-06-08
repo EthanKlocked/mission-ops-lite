@@ -78,7 +78,8 @@ Follow-up actions from QA were addressed by adding mocked end-to-end ingestion A
 
 - Catalog storage now persists locally in SQLite, but there is still no managed remote database.
 - Live ingestion can be rate/update-window limited by CelesTrak.
-- SGP4 position output is approximate derived data from public orbit elements, not live telemetry or mission-grade flight dynamics validation.
+- SGP4 position and contact-window outputs are approximate derived data from public orbit elements, not live telemetry or mission-grade flight dynamics/contact validation.
+- Contact-window calculation does not model RF link budget, antenna masks, terrain, weather, scheduling conflicts, or operational constraints.
 - No dashboard, simulated telemetry summary, or operations policy comparison is implemented by design.
 
 ## PR 2 verification
@@ -147,4 +148,55 @@ A local `TestClient` smoke check for `GET /satellites/25544/position?at=2026-05-
 
 ```text
 {'norad_cat_id': 25544, 'propagator': 'SGP4', 'coordinate_frame': 'TEME', 'is_approximate': True}
+```
+
+## PR 4 verification
+
+### TDD red check
+
+```bash
+uv run --extra dev python -m pytest tests/test_pr4_contact_windows.py -q
+```
+
+Initial result: failed because `GET /satellites/{norad_cat_id}/contact-windows` was not implemented yet and returned `404`. The first assertion expected `200` for the representative visibility request but received `404`; the missing-satellite detail assertion also saw FastAPI's generic `Not Found` because the route did not exist yet. This was the expected RED state for the new endpoint.
+
+### Targeted contact-window tests
+
+```bash
+uv run --extra dev python -m pytest tests/test_pr4_contact_windows.py -q
+```
+
+Result:
+
+```text
+4 passed
+```
+
+Additional coverage:
+
+- Successful SGP4-derived approximate contact-window response from a representative CelesTrak GP record.
+- Response metadata includes ground station, planning range, step size, minimum elevation, source epoch, freshness status, limitations, and grouped visibility windows.
+- Representative case uses a fixed orbit record, fixed ground-station coordinates near the sampled subpoint, and broad assertions for at least one window, peak timestamp, duration, and maximum elevation above the requested threshold.
+- No-visibility scenarios return an empty `windows` list with `count: 0`.
+- Invalid time ranges return `422`.
+- Unknown satellite returns `404`.
+
+### Full regression suite
+
+```bash
+uv run --extra dev python -m pytest -q
+```
+
+Result:
+
+```text
+15 passed
+```
+
+### Local endpoint smoke
+
+A local `TestClient` smoke check for `GET /satellites/25544/contact-windows?...` returned `200` with:
+
+```text
+{'norad_cat_id': 25544, 'count': 1, 'first_window': [{'start': '2026-05-28T02:57:00Z', 'end': '2026-05-28T03:03:00Z', 'peak_at': '2026-05-28T03:00:00Z', 'duration_seconds': 360.0, 'max_elevation_deg': 89.97014741275501}], 'is_approximate': True}
 ```

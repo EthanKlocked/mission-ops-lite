@@ -30,7 +30,7 @@ class CelesTrakClient:
     async def _fetch_with(self, http_client: httpx.AsyncClient) -> list[dict[str, Any]]:
         response = await http_client.get(
             self.ACTIVE_GP_JSON_URL,
-            headers={"User-Agent": "mission-ops-lite/0.1 (+private portfolio data ingestion)"},
+            headers={"User-Agent": "mission-ops-lite/0.1 (+public orbit data ingestion)"},
         )
         response.raise_for_status()
         payload = response.json()

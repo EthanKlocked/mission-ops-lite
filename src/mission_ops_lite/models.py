@@ -81,3 +81,37 @@ class SatellitePositionResponse(BaseModel):
     epoch_age_hours: Optional[float]
     is_approximate: bool = True
     limitations: list[str]
+
+
+class GroundStationResponse(BaseModel):
+    name: str
+    latitude_deg: float
+    longitude_deg: float
+    altitude_m: float
+
+
+class ContactWindowResponse(BaseModel):
+    start: datetime
+    end: datetime
+    peak_at: datetime
+    duration_seconds: float
+    max_elevation_deg: float
+
+
+class ContactWindowListResponse(BaseModel):
+    object_name: str
+    norad_cat_id: int
+    source: DataSource
+    source_epoch: datetime
+    start: datetime
+    end: datetime
+    ground_station: GroundStationResponse
+    min_elevation_deg: float
+    step_seconds: int
+    propagator: str = "SGP4"
+    is_approximate: bool = True
+    freshness_status: FreshnessStatus
+    epoch_age_hours: Optional[float]
+    count: int
+    windows: list[ContactWindowResponse]
+    limitations: list[str]

@@ -28,7 +28,7 @@
 
 ## PR 3
 
-- Next portfolio milestone: SGP4-derived approximate position endpoint.
+- Next milestone: SGP4-derived approximate position endpoint.
 - Endpoint: `GET /satellites/{norad_cat_id}/position?at=...`.
 - Dependency: `sgp4` Python package, constrained to `>=2.23,<3.0`.
 - Source data boundary: CelesTrak GP/TLE-style records provide public orbit elements at `EPOCH`, not direct latest latitude/longitude/altitude.
@@ -36,3 +36,14 @@
 - Coordinate output: return SGP4 position/velocity in TEME, plus an approximate geodetic convenience field for latitude, longitude, and altitude.
 - Explicit non-goals: no live spacecraft telemetry, no real-time spacecraft tracking claim, no actual spacecraft position certification, no mission-grade flight dynamics validation, and no RF/downlink or command/control interface.
 - Roadmap order after this milestone: ground-station visibility/contact-window calculation, then clearly labeled simulated telemetry plus anomaly/event workflow.
+
+## PR 4
+
+- Next milestone: ground-station visibility/contact-window calculation.
+- Endpoint: `GET /satellites/{norad_cat_id}/contact-windows?...`.
+- Inputs: ground-station latitude/longitude/altitude, display name, planning range start/end, sampling step, and minimum elevation.
+- Calculation approach: sample SGP4-derived approximate geodetic positions over the requested range, convert satellite and ground-station coordinates to approximate ECEF, compute topocentric elevation, and group contiguous samples above the minimum elevation threshold.
+- Response framing: "SGP4-derived approximate visibility from public orbit elements."
+- Derived contact-window requests are read-only; results are not stored in SQLite.
+- Explicit non-goals: no RF link budget, antenna mask, terrain, weather, scheduling conflicts, downlink/telecommand modeling, or mission-grade contact validation.
+- Roadmap order after this milestone: frontend dashboard/2D visualization direction check, then simulated telemetry plus anomaly/event workflow if still prioritized.
