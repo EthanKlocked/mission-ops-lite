@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Optional, Protocol
 
 import httpx
@@ -8,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Query
 from .catalog import SatelliteCatalog
 from .celestrak import CelesTrakClient
 from .models import SatelliteListResponse, SatelliteOrbitRecord, SatelliteResponse
+from .store import SQLiteCatalogStore
 
 
 class CelesTrakFetcher(Protocol):
@@ -35,6 +37,8 @@ def _to_response(record: SatelliteOrbitRecord, *, include_raw: bool = False) -> 
 def create_app(
     catalog: Optional[SatelliteCatalog] = None,
     celestrak_client: Optional[CelesTrakFetcher] = None,
+    store: Optional[SQLiteCatalogStore] = None,
+    cache_ttl_hours: float = 2.0,
 ) -> FastAPI:
     app = FastAPI(
         title="Mission Ops Lite",
@@ -44,7 +48,14 @@ def create_app(
             "and EPOCH freshness modeling."
         ),
     )
-    app.state.catalog = catalog or SatelliteCatalog.empty()
+    app.state.store = store
+    app.state.cache_ttl_hours = cache_ttl_hours
+    if catalog is not None:
+        app.state.catalog = catalog
+    elif store is not None:
+        app.state.catalog = store.latest_catalog()
+    else:
+        app.state.catalog = SatelliteCatalog.empty()
     app.state.celestrak_client = celestrak_client or CelesTrakClient()
 
     @app.get("/health")
@@ -52,26 +63,43 @@ def create_app(
         return {"status": "ok"}
 
     @app.post("/ingest/celestrak", response_model=SatelliteListResponse, response_model_exclude_none=True)
-    async def ingest_celestrak() -> SatelliteListResponse:
+    async def ingest_celestrak(force: bool = Query(default=False)) -> SatelliteListResponse:
+        if (
+            app.state.store is not None
+            and not force
+            and app.state.store.has_recent_successful_ingestion(app.state.cache_ttl_hours)
+        ):
+            app.state.catalog = app.state.store.latest_catalog()
+            return _list_response(app.state.catalog)
         try:
             records = await app.state.celestrak_client.fetch_active_gp_records()
         except httpx.HTTPStatusError as exc:
             detail = f"CelesTrak request failed with HTTP {exc.response.status_code}"
             if exc.response.status_code == 403:
                 detail += "; CelesTrak may reject repeated downloads until data updates"
+            if app.state.store is not None:
+                app.state.store.save_failed_ingestion(detail, http_status=exc.response.status_code)
             raise HTTPException(status_code=502, detail=detail) from exc
         except httpx.HTTPError as exc:
+            if app.state.store is not None:
+                app.state.store.save_failed_ingestion("CelesTrak request failed")
             raise HTTPException(status_code=502, detail="CelesTrak request failed") from exc
         app.state.catalog = SatelliteCatalog.from_records(records)
-        return SatelliteListResponse(
-            count=len(app.state.catalog.list_satellites()),
-            items=[_to_response(record) for record in app.state.catalog.list_satellites()],
-        )
+        if app.state.store is not None:
+            app.state.store.save_successful_ingestion(app.state.catalog)
+        return _list_response(app.state.catalog)
 
     @app.get("/satellites", response_model=SatelliteListResponse, response_model_exclude_none=True)
     def list_satellites() -> SatelliteListResponse:
         records = app.state.catalog.list_satellites()
         return SatelliteListResponse(count=len(records), items=[_to_response(record) for record in records])
+
+    @app.get("/ingestion-runs")
+    def list_ingestion_runs(limit: int = Query(default=20, ge=1, le=100)) -> dict[str, Any]:
+        if app.state.store is None:
+            return {"count": 0, "items": []}
+        runs = app.state.store.list_ingestion_runs(limit=limit)
+        return {"count": len(runs), "items": runs}
 
     @app.get("/satellites/{norad_cat_id}", response_model=SatelliteResponse, response_model_exclude_none=True)
     def get_satellite(
@@ -85,4 +113,9 @@ def create_app(
     return app
 
 
-app = create_app()
+def _list_response(catalog: SatelliteCatalog) -> SatelliteListResponse:
+    records = catalog.list_satellites()
+    return SatelliteListResponse(count=len(records), items=[_to_response(record) for record in records])
+
+
+app = create_app(store=SQLiteCatalogStore(Path("data/mission_ops_lite.db")))

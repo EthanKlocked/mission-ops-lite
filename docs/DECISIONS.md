@@ -16,3 +16,12 @@
   - `epoch`: source event time from CelesTrak EPOCH.
   - `ingested_at`: local ingestion time when source records are normalized.
   - `generated_at`: reserved for later simulated/derived data, not used in PR 1.
+
+## PR 2
+
+- Storage: SQLite via Python standard library `sqlite3`, with no external database service.
+- Default local database path: `data/mission_ops_lite.db`.
+- Database files are ignored by git; schema lives in code.
+- Cache policy: successful CelesTrak ingestions are reused for 2 hours by default to avoid repeatedly downloading near-static source snapshots.
+- `POST /ingest/celestrak?force=true` bypasses the cache for explicit refresh.
+- Store ingestion run history, stable satellite identifiers, and orbit snapshots separately so later history queries or position propagation can build on the same schema.

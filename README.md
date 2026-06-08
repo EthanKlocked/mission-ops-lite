@@ -2,7 +2,7 @@
 
 Mission Ops Lite is a private-first portfolio project for mission-data / operations-policy simulation.
 
-PR 1 focuses only on public satellite catalog ingestion and freshness modeling. It ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, and exposes bounded catalog/detail APIs.
+The current backend ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, and exposes bounded catalog/detail APIs.
 
 ## What this is
 
@@ -33,6 +33,22 @@ Timestamp fields:
 
 Raw CelesTrak records are preserved on internal normalized records for traceability. API responses intentionally do not include `raw_record` unless the caller explicitly requests it on the detail endpoint with `?include_raw=true`.
 
+## Storage and cache
+
+The default local server uses SQLite at:
+
+```text
+data/mission_ops_lite.db
+```
+
+The database file is intentionally ignored by git. It stores:
+
+- ingestion run history
+- stable satellite identifiers
+- orbit data snapshots for the latest and prior successful ingestions
+
+`POST /ingest/celestrak` uses a 2-hour cache window by default. If a successful ingestion happened recently, the API returns the cached latest catalog instead of downloading the same CelesTrak snapshot again. Use `?force=true` to force a fresh upstream fetch.
+
 ## API
 
 ### `POST /ingest/celestrak`
@@ -43,7 +59,7 @@ Fetches live active GP JSON records from:
 https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json
 ```
 
-The response returns normalized records after ingestion.
+The response returns normalized records after ingestion. If the SQLite cache is still fresh, this returns the latest cached catalog without re-fetching. Add `?force=true` to bypass the cache.
 
 CelesTrak may return `403 Forbidden` when the same dataset has already been downloaded recently from the same network before the next data update window. The API translates upstream HTTP/network failures into `502` responses instead of treating them as successful ingestions.
 
@@ -69,6 +85,10 @@ Minimum normalized fields:
 ### `GET /satellites/{norad_cat_id}`
 
 Returns one normalized satellite record. Add `?include_raw=true` to include the retained raw source record for explicit trace inspection.
+
+### `GET /ingestion-runs`
+
+Returns recent ingestion attempts from SQLite, including source URL, status, record count, and error details when available.
 
 ## Freshness model
 
@@ -101,6 +121,7 @@ Ingest live public CelesTrak data:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/ingest/celestrak
+curl -X POST 'http://127.0.0.1:8000/ingest/celestrak?force=true'
 ```
 
 Query the catalog:

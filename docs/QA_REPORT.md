@@ -76,6 +76,25 @@ Follow-up actions from QA were addressed by adding mocked end-to-end ingestion A
 
 ## Limitations remaining
 
-- Catalog storage is in-memory only for PR 1.
+- Catalog storage now persists locally in SQLite, but there is still no managed remote database.
 - Live ingestion can be rate/update-window limited by CelesTrak.
-- No dashboard, simulated telemetry summary, or operations policy comparison is implemented in PR 1 by design.
+- No dashboard, simulated telemetry summary, or operations policy comparison is implemented by design.
+
+## PR 2 verification
+
+```bash
+uv run --extra dev pytest
+```
+
+Result:
+
+```text
+8 passed in 0.20s
+```
+
+Additional coverage:
+
+- SQLite-backed latest catalog persists across app instances.
+- Recent successful ingestion uses the cache instead of re-fetching.
+- `?force=true` bypasses the cache.
+- `GET /ingestion-runs` reports stored ingestion history.
