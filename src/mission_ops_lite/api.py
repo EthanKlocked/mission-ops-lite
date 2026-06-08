@@ -8,7 +8,13 @@ from fastapi import FastAPI, HTTPException, Query
 
 from .catalog import SatelliteCatalog
 from .celestrak import CelesTrakClient
-from .models import SatelliteListResponse, SatelliteOrbitRecord, SatelliteResponse
+from .models import SatelliteListResponse, SatelliteOrbitRecord, SatellitePositionResponse, SatelliteResponse
+from .propagation import (
+    PropagationInputError,
+    PropagationRuntimeError,
+    parse_requested_at,
+    propagate_sgp4_position,
+)
 from .store import SQLiteCatalogStore
 
 
@@ -100,6 +106,48 @@ def create_app(
             return {"count": 0, "items": []}
         runs = app.state.store.list_ingestion_runs(limit=limit)
         return {"count": len(runs), "items": runs}
+
+    @app.get(
+        "/satellites/{norad_cat_id}/position",
+        response_model=SatellitePositionResponse,
+        response_model_exclude_none=True,
+    )
+    def get_satellite_position(
+        norad_cat_id: int,
+        at: Optional[str] = Query(
+            default=None,
+            description="ISO-8601 timestamp for SGP4-derived approximate position",
+        ),
+    ) -> SatellitePositionResponse:
+        record = app.state.catalog.get_satellite(norad_cat_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Satellite not found")
+        try:
+            requested_at = parse_requested_at(at)
+            estimate = propagate_sgp4_position(record, requested_at=requested_at)
+        except PropagationInputError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except PropagationRuntimeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return SatellitePositionResponse(
+            object_name=estimate.object_name,
+            norad_cat_id=estimate.norad_cat_id,
+            source=record.source,
+            source_epoch=estimate.source_epoch,
+            requested_at=estimate.requested_at,
+            time_delta_minutes_from_epoch=estimate.time_delta_minutes_from_epoch,
+            position_km=estimate.position_km,
+            velocity_km_s=estimate.velocity_km_s,
+            approximate_geodetic=estimate.approximate_geodetic,
+            freshness_status=estimate.freshness_status,
+            epoch_age_hours=estimate.epoch_age_hours,
+            limitations=[
+                "SGP4-derived approximate position from public orbit elements.",
+                "Not live spacecraft telemetry",
+                "Not real-time spacecraft tracking",
+                "Not mission-grade flight dynamics validation",
+            ],
+        )
 
     @app.get("/satellites/{norad_cat_id}", response_model=SatelliteResponse, response_model_exclude_none=True)
     def get_satellite(

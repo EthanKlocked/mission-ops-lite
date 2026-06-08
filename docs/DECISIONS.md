@@ -25,3 +25,14 @@
 - Cache policy: successful CelesTrak ingestions are reused for 2 hours by default to avoid repeatedly downloading near-static source snapshots.
 - `POST /ingest/celestrak?force=true` bypasses the cache for explicit refresh.
 - Store ingestion run history, stable satellite identifiers, and orbit snapshots separately so later history queries or position propagation can build on the same schema.
+
+## PR 3
+
+- Next portfolio milestone: SGP4-derived approximate position endpoint.
+- Endpoint: `GET /satellites/{norad_cat_id}/position?at=...`.
+- Dependency: `sgp4` Python package, constrained to `>=2.23,<3.0`.
+- Source data boundary: CelesTrak GP/TLE-style records provide public orbit elements at `EPOCH`, not direct latest latitude/longitude/altitude.
+- Response framing: "SGP4-derived approximate position from public orbit elements."
+- Coordinate output: return SGP4 position/velocity in TEME, plus an approximate geodetic convenience field for latitude, longitude, and altitude.
+- Explicit non-goals: no live spacecraft telemetry, no real-time spacecraft tracking claim, no actual spacecraft position certification, no mission-grade flight dynamics validation, and no RF/downlink or command/control interface.
+- Roadmap order after this milestone: ground-station visibility/contact-window calculation, then clearly labeled simulated telemetry plus anomaly/event workflow.
