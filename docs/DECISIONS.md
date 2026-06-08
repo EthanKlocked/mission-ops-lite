@@ -28,7 +28,7 @@
 
 ## PR 3
 
-- Next portfolio milestone: SGP4-derived approximate position endpoint.
+- Next milestone: SGP4-derived approximate position endpoint.
 - Endpoint: `GET /satellites/{norad_cat_id}/position?at=...`.
 - Dependency: `sgp4` Python package, constrained to `>=2.23,<3.0`.
 - Source data boundary: CelesTrak GP/TLE-style records provide public orbit elements at `EPOCH`, not direct latest latitude/longitude/altitude.
@@ -39,7 +39,7 @@
 
 ## PR 4
 
-- Next portfolio milestone: ground-station visibility/contact-window calculation.
+- Next milestone: ground-station visibility/contact-window calculation.
 - Endpoint: `GET /satellites/{norad_cat_id}/contact-windows?...`.
 - Inputs: ground-station latitude/longitude/altitude, display name, planning range start/end, sampling step, and minimum elevation.
 - Calculation approach: sample SGP4-derived approximate geodetic positions over the requested range, convert satellite and ground-station coordinates to approximate ECEF, compute topocentric elevation, and group contiguous samples above the minimum elevation threshold.

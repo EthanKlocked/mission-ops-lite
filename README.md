@@ -1,6 +1,6 @@
 # Mission Ops Lite
 
-Mission Ops Lite is a public portfolio project for mission-data / operations-policy simulation.
+Mission Ops Lite is a lightweight backend for public satellite orbit data ingestion, derived position estimates, and operations-planning workflows.
 
 The current backend ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, and exposes bounded catalog/detail APIs. It can also derive approximate satellite positions and ground-station contact windows for requested timestamps using SGP4 and public orbit elements.
 
