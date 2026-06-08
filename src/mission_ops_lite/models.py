@@ -51,3 +51,33 @@ class SatelliteResponse(BaseModel):
 class SatelliteListResponse(BaseModel):
     count: int
     items: list[SatelliteResponse]
+
+
+class Vector3(BaseModel):
+    x: float
+    y: float
+    z: float
+
+
+class ApproximateGeodeticPosition(BaseModel):
+    latitude_deg: float
+    longitude_deg: float
+    altitude_km: float
+
+
+class SatellitePositionResponse(BaseModel):
+    object_name: str
+    norad_cat_id: int
+    source: DataSource
+    source_epoch: datetime
+    requested_at: datetime
+    time_delta_minutes_from_epoch: float
+    propagator: str = "SGP4"
+    coordinate_frame: str = "TEME"
+    position_km: Vector3
+    velocity_km_s: Vector3
+    approximate_geodetic: ApproximateGeodeticPosition
+    freshness_status: FreshnessStatus
+    epoch_age_hours: Optional[float]
+    is_approximate: bool = True
+    limitations: list[str]

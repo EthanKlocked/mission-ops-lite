@@ -1,14 +1,15 @@
 # Mission Ops Lite
 
-Mission Ops Lite is a private-first portfolio project for mission-data / operations-policy simulation.
+Mission Ops Lite is a public portfolio project for mission-data / operations-policy simulation.
 
-The current backend ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, and exposes bounded catalog/detail APIs.
+The current backend ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, and exposes bounded catalog/detail APIs. It can also derive an approximate satellite position for a requested timestamp using SGP4 and public orbit elements.
 
 ## What this is
 
 - A mission-data modeling backend.
 - A public satellite/orbit catalog ingestion service using CelesTrak GP JSON.
 - A timestamp-lineage demonstration that separates source event time from ingestion time.
+- An SGP4-derived approximate position API from public orbit elements.
 - A foundation for later simulated telemetry and operations-policy comparison.
 
 ## What this is not
@@ -18,12 +19,13 @@ The current backend ingests public CelesTrak active GP orbit metadata, normalize
 - No telecommand capability.
 - Not flight software.
 - No mission-grade validation claim.
+- Not live spacecraft telemetry or real-time spacecraft tracking.
 - Simulated telemetry, when added in later PRs, is not real spacecraft telemetry.
 - This is not a fake satellite control console.
 
 ## Data lineage labels
 
-PR 1 uses only `real_public_orbit_data` from CelesTrak.
+The catalog uses `real_public_orbit_data` from CelesTrak. Position output is derived from those public orbit elements, not directly measured live position or spacecraft telemetry.
 
 Timestamp fields:
 
@@ -86,6 +88,24 @@ Minimum normalized fields:
 
 Returns one normalized satellite record. Add `?include_raw=true` to include the retained raw source record for explicit trace inspection.
 
+### `GET /satellites/{norad_cat_id}/position?at=...`
+
+Returns an SGP4-derived approximate position from public CelesTrak GP orbit elements.
+
+Important framing:
+
+- CelesTrak GP/TLE-style data provides orbit elements at a source `EPOCH`; it does not directly provide latest latitude/longitude/altitude.
+- SGP4 uses those orbit elements plus the requested `at` timestamp to propagate an approximate state.
+- `position_km` and `velocity_km_s` are returned in the TEME coordinate frame.
+- `approximate_geodetic` is included as an approximate latitude/longitude/altitude convenience field.
+- This endpoint is not live spacecraft telemetry, real-time spacecraft tracking, or mission-grade flight dynamics validation.
+
+Example:
+
+```bash
+curl 'http://127.0.0.1:8000/satellites/25544/position?at=2026-05-28T03:00:00Z'
+```
+
 ### `GET /ingestion-runs`
 
 Returns recent ingestion attempts from SQLite, including source URL, status, record count, and error details when available.
@@ -108,7 +128,7 @@ Requirements:
 Install/test:
 
 ```bash
-uv run --extra dev pytest
+uv run --extra dev python -m pytest
 ```
 
 Run the backend:
@@ -130,6 +150,7 @@ Query the catalog:
 curl http://127.0.0.1:8000/satellites
 curl http://127.0.0.1:8000/satellites/25544
 curl 'http://127.0.0.1:8000/satellites/25544?include_raw=true'
+curl 'http://127.0.0.1:8000/satellites/25544/position?at=2026-05-28T03:00:00Z'
 ```
 
 ## Test strategy
@@ -141,3 +162,4 @@ The tests mock the CelesTrak HTTP response through `httpx.MockTransport`, so the
 - Raw record preservation for traceability.
 - EPOCH age and `fresh` / `stale` / `unknown` statuses.
 - API response bounds so raw records are not exposed by default.
+- SGP4-derived approximate position metadata, missing-satellite handling, and insufficient-orbit-element handling.

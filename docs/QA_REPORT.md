@@ -1,6 +1,6 @@
-# QA Report — PR 1
+# QA Report
 
-## Commands run
+## PR 1 verification
 
 ### TDD red check
 
@@ -78,6 +78,7 @@ Follow-up actions from QA were addressed by adding mocked end-to-end ingestion A
 
 - Catalog storage now persists locally in SQLite, but there is still no managed remote database.
 - Live ingestion can be rate/update-window limited by CelesTrak.
+- SGP4 position output is approximate derived data from public orbit elements, not live telemetry or mission-grade flight dynamics validation.
 - No dashboard, simulated telemetry summary, or operations policy comparison is implemented by design.
 
 ## PR 2 verification
@@ -98,3 +99,52 @@ Additional coverage:
 - Recent successful ingestion uses the cache instead of re-fetching.
 - `?force=true` bypasses the cache.
 - `GET /ingestion-runs` reports stored ingestion history.
+
+## PR 3 verification
+
+### TDD red check
+
+```bash
+uv run --extra dev pytest tests/test_pr3_sgp4_position.py -q
+```
+
+Initial result: failed because `GET /satellites/{norad_cat_id}/position` was not implemented yet and returned `404`. This was the expected RED state for the new endpoint.
+
+### Targeted SGP4 position tests
+
+```bash
+uv run --extra dev python -m pytest tests/test_pr3_sgp4_position.py -q
+```
+
+Result:
+
+```text
+3 passed
+```
+
+Additional coverage:
+
+- Successful SGP4-derived approximate position response from a representative CelesTrak GP record.
+- Response metadata includes source epoch, requested timestamp, time delta from epoch, propagator, coordinate frame, TEME position/velocity, approximate geodetic fields, freshness status, and limitations.
+- Unknown satellite returns `404`.
+- Records missing required orbit elements return `422`.
+
+### Full regression suite
+
+```bash
+uv run --extra dev python -m pytest
+```
+
+Result:
+
+```text
+11 passed in 0.20s
+```
+
+### Local endpoint smoke
+
+A local `TestClient` smoke check for `GET /satellites/25544/position?at=2026-05-28T03:00:00Z` returned `200` with:
+
+```text
+{'norad_cat_id': 25544, 'propagator': 'SGP4', 'coordinate_frame': 'TEME', 'is_approximate': True}
+```
