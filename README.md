@@ -1,8 +1,8 @@
 # Mission Ops Lite
 
-Mission Ops Lite is a lightweight backend for public satellite orbit data ingestion, derived position estimates, and operations-planning workflows.
+Mission Ops Lite is a lightweight backend and local dashboard for public satellite orbit data ingestion, derived position estimates, and operations-planning workflows.
 
-The current backend ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, and exposes bounded catalog/detail APIs. It can also derive approximate satellite positions and ground-station contact windows for requested timestamps using SGP4 and public orbit elements.
+The current system ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, exposes bounded catalog/detail APIs, and provides a local operator-facing dashboard. It can also derive approximate satellite positions and ground-station contact windows for requested timestamps using SGP4 and public orbit elements.
 
 ## What this is
 
@@ -11,6 +11,7 @@ The current backend ingests public CelesTrak active GP orbit metadata, normalize
 - A timestamp-lineage demonstration that separates source event time from ingestion time.
 - An SGP4-derived approximate position API from public orbit elements.
 - A ground-station visibility/contact-window planning API derived from approximate positions.
+- A local operator dashboard for reviewing source lineage, freshness, approximate position, and contact-window estimates.
 - A foundation for later simulated telemetry and operations-policy comparison.
 
 ## What this is not
@@ -168,8 +169,37 @@ uv run --extra dev python -m pytest
 Run the backend:
 
 ```bash
-uv run uvicorn mission_ops_lite.api:app --reload
+PYTHONPATH=src uv run python -m uvicorn mission_ops_lite.api:app --reload
 ```
+
+Run the dashboard in a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5173
+```
+
+The dashboard expects the backend at `http://127.0.0.1:8000` by default. Override with:
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8000 npm run dev
+```
+
+Build the dashboard:
+
+```bash
+cd frontend
+npm run build
+```
+
+The dashboard uses manual and preset ground-station inputs. It does not request browser geolocation by default.
 
 Ingest live public CelesTrak data:
 
@@ -199,3 +229,18 @@ The tests mock the CelesTrak HTTP response through `httpx.MockTransport`, so the
 - API response bounds so raw records are not exposed by default.
 - SGP4-derived approximate position metadata, missing-satellite handling, and insufficient-orbit-element handling.
 - Ground-station contact-window responses, empty-window handling, invalid time ranges, and missing-satellite handling.
+- Frontend build verification for the local operator dashboard.
+
+## Dashboard workflow
+
+The local dashboard under `frontend/` presents the existing backend flow:
+
+1. Check backend health.
+2. Load the cached catalog or trigger CelesTrak ingestion.
+3. Search/select a satellite from the normalized catalog.
+4. Review source attribution, source epoch, ingestion time, and freshness status.
+5. Request an SGP4-derived approximate position for a chosen timestamp.
+6. Enter a preset/manual ground station and estimate approximate contact windows.
+7. View a simple 2D map-style context panel for satellite and ground-station orientation.
+
+Dashboard labels intentionally keep the same boundaries as the API: public orbit data in, approximate derived estimates out, no live telemetry, no validated scheduling, and no mission-grade claim.

@@ -5,6 +5,7 @@ from typing import Any, Optional, Protocol, cast
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from .catalog import SatelliteCatalog
 from .celestrak import CelesTrakClient
@@ -65,9 +66,18 @@ def create_app(
         title="Mission Ops Lite",
         version="0.1.0",
         description=(
-            "PR1 API for public CelesTrak satellite catalog ingestion, normalization, "
-            "and EPOCH freshness modeling."
+            "Local-first API for public CelesTrak satellite catalog ingestion, SQLite cache "
+            "history, SGP4-derived approximate positions, and estimated ground-station "
+            "contact windows. Outputs are derived from public orbit elements and are not "
+            "live telemetry or mission-grade operational validation."
         ),
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://(127\.0\.0\.1|localhost):517[0-9]",
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.state.store = store
     app.state.cache_ttl_hours = cache_ttl_hours

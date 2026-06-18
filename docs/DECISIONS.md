@@ -47,3 +47,14 @@
 - Derived contact-window requests are read-only; results are not stored in SQLite.
 - Explicit non-goals: no RF link budget, antenna mask, terrain, weather, scheduling conflicts, downlink/telecommand modeling, or mission-grade contact validation.
 - Roadmap order after this milestone: frontend dashboard/2D visualization direction check, then simulated telemetry plus anomaly/event workflow if still prioritized.
+
+## PR 5
+
+- Mentor direction: proceed with the frontend dashboard first, but include a short pre-dashboard repo quality pass.
+- Dashboard goal: make the existing public orbit catalog ingestion, local cache, approximate SGP4 position, and estimated ground-station contact-window capabilities visible in an operator-facing browser UI.
+- Frontend stack: React + TypeScript + Vite under `frontend/`, local-first against the FastAPI backend.
+- Visualization approach: simple 2D equirectangular map-style context panel with approximate satellite and ground-station markers, not a precision tracking display.
+- Dashboard emphasis: data lineage, freshness, source attribution, and limitation labels.
+- Ground-station inputs: manual and presets only; no browser geolocation request by default.
+- Repo quality pass: add GitHub Actions for backend pytest and frontend build, update API description/CORS for local dashboard use, and document run/build commands.
+- Follow-up after dashboard review: simulated telemetry plus anomaly/event workflow layered on top of public orbit context.

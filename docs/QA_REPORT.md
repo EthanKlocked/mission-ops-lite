@@ -80,7 +80,7 @@ Follow-up actions from QA were addressed by adding mocked end-to-end ingestion A
 - Live ingestion can be rate/update-window limited by CelesTrak.
 - SGP4 position and contact-window outputs are approximate derived data from public orbit elements, not live telemetry or mission-grade flight dynamics/contact validation.
 - Contact-window calculation does not model RF link budget, antenna masks, terrain, weather, scheduling conflicts, or operational constraints.
-- No dashboard, simulated telemetry summary, or operations policy comparison is implemented by design.
+- Simulated telemetry summary and operations policy comparison are not implemented by design.
 
 ## PR 2 verification
 
@@ -200,3 +200,100 @@ A local `TestClient` smoke check for `GET /satellites/25544/contact-windows?...`
 ```text
 {'norad_cat_id': 25544, 'count': 1, 'first_window': [{'start': '2026-05-28T02:57:00Z', 'end': '2026-05-28T03:03:00Z', 'peak_at': '2026-05-28T03:00:00Z', 'duration_seconds': 360.0, 'max_elevation_deg': 89.97014741275501}], 'is_approximate': True}
 ```
+
+## PR 5 dashboard verification
+
+### Backend regression, frontend audit, frontend build
+
+Executed on `2026-06-08T08:59:59Z` from branch `feat/operator-dashboard`.
+
+```bash
+uv run --extra dev python -m pytest -q
+cd frontend
+npm audit --audit-level=moderate
+npm run build
+```
+
+Result:
+
+```text
+15 passed
+found 0 vulnerabilities
+vite v6.4.3 building for production...
+✓ built
+```
+
+### Local server smoke
+
+Backend command used for smoke testing:
+
+```bash
+PYTHONPATH=src uv run python -m uvicorn mission_ops_lite.api:app --host 127.0.0.1 --port 8000
+```
+
+Frontend commands used for smoke testing:
+
+```bash
+cd frontend
+npm run dev -- --host 127.0.0.1 --port 5173
+npm run dev -- --host 127.0.0.1 --port 5174
+```
+
+Local API smoke results:
+
+```text
+GET /health -> 200 {"status":"ok"}
+GET /satellites -> 200, count 15630 after CelesTrak ingest/use-cache flow
+GET /satellites/25544/position?at=2026-06-08T17:55:00Z -> 200, is_approximate true
+GET /satellites/25544/contact-windows?... -> 200, count 0, is_approximate true
+```
+
+Additional browser CORS check on `2026-06-08T09:06:46Z`:
+
+```text
+OPTIONS /health from Origin http://127.0.0.1:5174 -> 200 with access-control-allow-origin: http://127.0.0.1:5174
+```
+
+### Browser smoke
+
+Browser-tested dashboard at:
+
+```text
+http://127.0.0.1:5173
+http://127.0.0.1:5174
+```
+
+Observed flow:
+
+1. Dashboard loaded with backend health badge `Backend ok`.
+2. `Ingest / use cache` / cached startup flow loaded CelesTrak GP active catalog data.
+3. Search for `25544` returned `ISS (ZARYA)`.
+4. Selected satellite detail displayed NORAD ID, object ID, source epoch, ingested time, epoch age, inclination, source lineage, and freshness.
+5. Approximate position calculation displayed latitude, longitude, altitude, and TEME frame.
+6. Contact-window estimate returned a valid zero-window table for the selected Pacific demo station/time range.
+7. 2D context panel displayed satellite and ground-station markers and retained approximate/orientation-only framing.
+8. Browser console reported no JavaScript errors during navigation, ingestion/cache load, selection, and calculation checks.
+
+Issue found and fixed during smoke:
+
+- The initial CORS allowlist only covered Vite port `5173`; a dev server running on `5174` showed `Backend offline` / `Failed to fetch` even though the backend was healthy.
+- Fixed by changing the backend CORS configuration to allow local Vite dev origins matching `http://127.0.0.1:517[0-9]` and `http://localhost:517[0-9]`.
+- Re-ran backend tests after the fix: `15 passed`.
+
+Screenshot evidence:
+
+```text
+/Users/ethanklocked/.hermes/profiles/personal-creator/cache/screenshots/browser_screenshot_609fbe6ee8354551a654b25dcdd07370.png
+/Users/ethanklocked/.hermes/profiles/personal-creator/cache/screenshots/browser_screenshot_02ce0154654843f5a50c138d67a41a17.png
+```
+
+### Public wording/framing scan
+
+```bash
+git grep -n -i 'portfolio\|포트폴리오' -- ':!docs/QA_REPORT.md' ':!docs/DECISIONS.md' ':!docs/IMPLEMENTATION_PLAN.md' || true
+```
+
+Result: no public-facing matches.
+
+Overclaim scan found only explicit non-goal/limitation language for live telemetry, real-time tracking, RF/downlink, telecommand, and mission-grade claims.
+
