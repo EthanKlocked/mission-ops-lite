@@ -1,81 +1,125 @@
-# Operator Dashboard Implementation Plan
+# Simulated Telemetry and Event Workflow Implementation Plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
+> **For Hermes:** Use test-driven-development and requesting-code-review skills before commit.
 
-**Goal:** Build a lightweight operator-facing dashboard for the existing Mission Ops Lite backend.
+**Goal:** Add a clearly labeled simulated telemetry and simulated event workflow layer on top of public CelesTrak orbit context.
 
-**Architecture:** Keep the backend API unchanged except for browser CORS support and API wording cleanup. Add a standalone React/Vite frontend under `frontend/` that calls the local FastAPI backend and renders the ingestion → satellite selection → position → contact-window flow with clear source/freshness/limitation labels.
+**Architecture:** Keep public orbit ingestion, SGP4 position, contact-window estimates, and simulated telemetry as separate data layers. Implement deterministic scenario generation in a backend module, expose read-only FastAPI endpoints, and add modest dashboard panels for scenario controls, subsystem health, events, runbook summary, and policy comparison.
 
-**Tech Stack:** FastAPI, pytest, React, TypeScript, Vite, CSS, GitHub Actions.
+**Tech Stack:** FastAPI, Pydantic-compatible dict responses, pytest, React, TypeScript, Vite, CSS.
 
 ---
 
-### Task 1: Pre-dashboard repo quality pass
+## Task 1: Add failing PR6 backend tests
 
-**Objective:** Establish baseline verification and CI before frontend implementation.
+**Objective:** Capture the PR6 acceptance criteria before implementation.
 
 **Files:**
-- Create: `.github/workflows/ci.yml`
-- Modify: `README.md`
+- Create: `tests/test_pr6_simulated_telemetry.py`
+- Create: `tests/test_pr6_event_workflow.py`
+- Create: `tests/test_pr6_policy_comparison.py`
+
+**Verification:**
+
+```bash
+uv run --extra dev python -m pytest tests/test_pr6_simulated_telemetry.py tests/test_pr6_event_workflow.py tests/test_pr6_policy_comparison.py -q
+```
+
+Initial RED result: expected route-not-found failures before the endpoint implementation.
+
+## Task 2: Implement deterministic simulated telemetry engine
+
+**Objective:** Generate scenario-backed subsystem samples that are deterministic for a fixed satellite/scenario/seed/duration/step.
+
+**Files:**
+- Create: `src/mission_ops_lite/simulated_telemetry.py`
+
+**Implementation notes:**
+- Required scenarios: `nominal`, `thermal_drift`, `power_drop`, `comms_degradation`.
+- Required subsystems: `power`, `thermal`, `communications`, `payload`, `attitude_mode`.
+- Every response includes `data_kind`, `simulation_version`, `generated_at`, `seed`, satellite identity, source orbit epoch, limitations, and sample lineage fields.
+- Limitations explicitly say this is not real/live spacecraft telemetry and not mission-grade operations software.
+
+## Task 3: Implement policy event and comparison logic
+
+**Objective:** Turn telemetry samples into warning/critical events under policy profiles and compare policies over the same stream.
+
+**Files:**
+- Modify: `src/mission_ops_lite/simulated_telemetry.py`
+
+**Implementation notes:**
+- Required policies: `conservative_ops`, `balanced_ops`, `relaxed_ops`.
+- Policies differ by thresholds and persistence requirements.
+- Event payloads include ID, event time, subsystem, severity, scenario, policy, triggering measurement, value, threshold, summary, recommended operator check, and `is_simulated`.
+- Comparison output includes event counts, first warning/critical time, top affected subsystem, recommended action, and policy notes.
+
+## Task 4: Expose read-only FastAPI endpoints
+
+**Objective:** Add API routes without adding persistence, external services, secrets, or deployment dependencies.
+
+**Files:**
 - Modify: `src/mission_ops_lite/api.py`
 
-**Steps:**
-1. Run `uv run --extra dev python -m pytest -q` and confirm backend baseline passes.
-2. Add GitHub Actions CI with backend pytest and frontend build jobs.
-3. Update FastAPI app description to reflect current capabilities beyond PR1.
-4. Add README commands for backend and frontend development.
-5. Run public wording scan before commit.
+**Endpoints:**
 
-### Task 2: Frontend shell and API client
+```http
+GET /satellites/{norad_cat_id}/telemetry/simulated
+GET /satellites/{norad_cat_id}/events/simulated
+GET /satellites/{norad_cat_id}/ops-policy-comparison
+```
 
-**Objective:** Add a Vite React frontend and typed API helpers.
+**Verification:**
 
-**Files:**
-- Create: `frontend/package.json`
-- Create: `frontend/package-lock.json`
-- Create: `frontend/index.html`
-- Create: `frontend/tsconfig.json`
-- Create: `frontend/vite.config.ts`
-- Create: `frontend/src/main.tsx`
-- Create: `frontend/src/api.ts`
-- Create: `frontend/src/types.ts`
+```bash
+uv run --extra dev python -m pytest tests/test_pr6_simulated_telemetry.py tests/test_pr6_event_workflow.py tests/test_pr6_policy_comparison.py -q
+```
 
-**Steps:**
-1. Create React/Vite project files under `frontend/`.
-2. Define TypeScript response types matching current API responses.
-3. Implement API helpers for health, ingest, satellites, satellite detail, position, and contact windows.
-4. Configure `VITE_API_BASE_URL` with default `http://127.0.0.1:8000`.
+GREEN result observed: `8 passed`.
 
-### Task 3: Dashboard UX and components
+## Task 5: Extend dashboard modestly
 
-**Objective:** Implement the operator-facing dashboard flow.
+**Objective:** Add evidence-oriented simulated telemetry workflow panels without redesigning the dashboard.
 
 **Files:**
-- Create/Modify: `frontend/src/App.tsx`
-- Create/Modify: `frontend/src/styles.css`
+- Modify: `frontend/src/api.ts`
+- Modify: `frontend/src/types.ts`
+- Modify: `frontend/src/App.tsx`
+- Modify: `frontend/src/styles.css`
 
-**Steps:**
-1. Build a dashboard header with limitation and lineage labels.
-2. Add backend health and ingest refresh controls.
-3. Add satellite search/list and selected satellite details.
-4. Add approximate position query panel.
-5. Add manual/preset ground-station contact-window panel.
-6. Add a simple 2D map-style visualization with approximate satellite and ground station markers.
-7. Keep browser geolocation absent by default.
+**UI elements:**
+- Scenario selector.
+- Policy selector.
+- Seed/duration/step controls.
+- Subsystem health tiles.
+- Event timeline.
+- Runbook-style summary.
+- Policy comparison table.
+- Clear simulated/not-live labels.
 
-### Task 4: Docs and QA evidence
+**Verification:**
 
-**Objective:** Document local use and verify the milestone.
+```bash
+cd frontend
+npm audit --audit-level=moderate
+npm run build
+```
+
+## Task 6: Update docs and PR evidence
+
+**Objective:** Document safe public wording, endpoints, local run commands, test evidence, and limitations.
 
 **Files:**
 - Modify: `README.md`
-- Modify: `docs/QA_REPORT.md`
+- Modify: `docs/CREATOR_HANDOFF.md`
 - Modify: `docs/DECISIONS.md`
+- Modify: `docs/QA_REPORT.md`
+- Create: `.ouroboros/seeds/mission-ops-lite-pr6-simulated-telemetry-events.yaml`
 
-**Steps:**
-1. Document dashboard setup/run/build commands.
-2. Record mentor direction and dashboard decisions.
-3. Run `uv run --extra dev python -m pytest -q`.
-4. Run `cd frontend && npm run build`.
-5. Run public wording scan for disallowed public-facing terms and overclaiming.
-6. Use Ouroboros QA against the Seed acceptance criteria.
+**Final verification commands:**
+
+```bash
+uv run --extra dev python -m pytest -q
+cd frontend && npm audit --audit-level=moderate && npm run build
+git grep -n -i 'portfolio\|포트폴리오' -- ':!docs/QA_REPORT.md' ':!docs/DECISIONS.md' ':!docs/IMPLEMENTATION_PLAN.md' || true
+git grep -n -i 'live telemetry\|real spacecraft health\|mission control\|flight operations system\|validated spacecraft anomaly detection' -- README.md docs src frontend || true
+```

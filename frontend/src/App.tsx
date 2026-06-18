@@ -3,20 +3,29 @@ import {
   apiBaseUrl,
   checkHealth,
   getContactWindows,
+  getOpsPolicyComparison,
   getPosition,
   getSatellite,
+  getSimulatedEvents,
+  getSimulatedTelemetry,
   ingestCelesTrak,
   listSatellites,
   type ContactWindowParams,
+  type SimulationParams,
 } from './api';
 import type {
   ContactWindowListResponse,
+  OpsPolicyComparisonResponse,
   SatelliteListResponse,
   SatellitePositionResponse,
   SatelliteRecord,
+  SimulatedEventWorkflowResponse,
+  SimulatedTelemetryResponse,
 } from './types';
 
 const ISS_NORAD_ID = 25544;
+const telemetryScenarios = ['nominal', 'thermal_drift', 'power_drop', 'comms_degradation'];
+const opsPolicies = ['conservative_ops', 'balanced_ops', 'relaxed_ops'];
 
 const groundStationPresets = [
   {
@@ -69,7 +78,7 @@ function mapTop(latitudeDeg: number): number {
   return ((90 - latitudeDeg) / 180) * 100;
 }
 
-function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'fresh' | 'stale' | 'neutral' }) {
+function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'fresh' | 'stale' | 'warning' | 'neutral' }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
@@ -184,6 +193,16 @@ export default function App() {
   const [positionAt, setPositionAt] = useState(toDatetimeLocalValue(new Date()));
   const [position, setPosition] = useState<SatellitePositionResponse | null>(null);
   const [contactWindows, setContactWindows] = useState<ContactWindowListResponse | null>(null);
+  const [simulation, setSimulation] = useState<SimulationParams>({
+    scenario: 'thermal_drift',
+    seed: 42,
+    duration_minutes: 60,
+    step_seconds: 300,
+  });
+  const [policy, setPolicy] = useState('balanced_ops');
+  const [telemetry, setTelemetry] = useState<SimulatedTelemetryResponse | null>(null);
+  const [eventWorkflow, setEventWorkflow] = useState<SimulatedEventWorkflowResponse | null>(null);
+  const [policyComparison, setPolicyComparison] = useState<OpsPolicyComparisonResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [station, setStation] = useState<ContactWindowParams>(() => {
@@ -207,6 +226,15 @@ export default function App() {
       : satellites;
     return list.slice(0, 80);
   }, [satellites, search]);
+
+  const latestSubsystemSamples = useMemo(() => {
+    if (!telemetry) return [];
+    const bySubsystem = new Map<string, SimulatedTelemetryResponse['samples'][number]>();
+    for (const sample of telemetry.samples) {
+      bySubsystem.set(sample.subsystem, sample);
+    }
+    return Array.from(bySubsystem.values());
+  }, [telemetry]);
 
   async function loadCatalog() {
     setBusy('Loading catalog');
@@ -274,6 +302,26 @@ export default function App() {
     }
   }
 
+  async function requestSimulatedOpsWorkflow() {
+    if (!selectedId) return;
+    setBusy('Generating simulated telemetry and event workflow');
+    setError(null);
+    try {
+      const [telemetryResponse, eventsResponse, comparisonResponse] = await Promise.all([
+        getSimulatedTelemetry(selectedId, simulation),
+        getSimulatedEvents(selectedId, { ...simulation, policy }),
+        getOpsPolicyComparison(selectedId, simulation),
+      ]);
+      setTelemetry(telemetryResponse);
+      setEventWorkflow(eventsResponse);
+      setPolicyComparison(comparisonResponse);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   useEffect(() => {
     checkHealth()
       .then((response) => setHealth(response.status))
@@ -291,6 +339,9 @@ export default function App() {
       .catch(() => setSelected(satellites.find((item) => item.norad_cat_id === selectedId) ?? null));
     setPosition(null);
     setContactWindows(null);
+    setTelemetry(null);
+    setEventWorkflow(null);
+    setPolicyComparison(null);
   }, [selectedId, satellites]);
 
   return (
@@ -419,6 +470,109 @@ export default function App() {
               </tbody>
             </table>
           ) : <p className="hint">Contact windows are sampled estimates and are not stored by the backend.</p>}
+        </section>
+
+        <section className="card simulation-card">
+          <div className="section-eyebrow">Simulated telemetry</div>
+          <h2>Scenario-backed subsystem health</h2>
+          <p>
+            This panel layers deterministic simulated spacecraft telemetry on the selected public orbit
+            record. It is not live spacecraft telemetry and is not a spacecraft monitoring system.
+          </p>
+          <div className="form-grid">
+            <label>
+              Scenario
+              <select
+                value={simulation.scenario}
+                onChange={(e) => setSimulation({ ...simulation, scenario: e.target.value })}
+              >
+                {telemetryScenarios.map((scenario) => <option value={scenario} key={scenario}>{scenario}</option>)}
+              </select>
+            </label>
+            <label>
+              Policy
+              <select value={policy} onChange={(e) => setPolicy(e.target.value)}>
+                {opsPolicies.map((item) => <option value={item} key={item}>{item}</option>)}
+              </select>
+            </label>
+            <label>Seed<input type="number" value={simulation.seed} onChange={(e) => setSimulation({ ...simulation, seed: Number(e.target.value) })} /></label>
+            <label>Duration minutes<input type="number" value={simulation.duration_minutes} onChange={(e) => setSimulation({ ...simulation, duration_minutes: Number(e.target.value) })} /></label>
+            <label>Step seconds<input type="number" value={simulation.step_seconds} onChange={(e) => setSimulation({ ...simulation, step_seconds: Number(e.target.value) })} /></label>
+          </div>
+          <button disabled={!selectedId} onClick={requestSimulatedOpsWorkflow}>Generate simulated workflow</button>
+          {telemetry ? (
+            <>
+              <div className="lineage-grid telemetry-meta">
+                <div><span className="label">Data kind</span><strong>{telemetry.data_kind}</strong></div>
+                <div><span className="label">Generated at</span><strong>{formatDate(telemetry.generated_at)}</strong></div>
+                <div><span className="label">Samples</span><strong>{telemetry.samples.length}</strong></div>
+              </div>
+              <div className="health-tile-grid">
+                {latestSubsystemSamples.map((sample) => (
+                  <div className="health-tile" key={sample.subsystem}>
+                    <span className="label">{sample.subsystem}</span>
+                    <strong>{formatNumber(sample.measurement_value, 2)} {sample.unit}</strong>
+                    <Badge tone={sample.status === 'critical' ? 'stale' : sample.status === 'warning' ? 'warning' : 'fresh'}>
+                      {sample.status} · {sample.measurement_name}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : <p className="hint">Generate a deterministic stream to see simulated subsystem health tiles.</p>}
+        </section>
+
+        <section className="card event-card">
+          <div className="section-eyebrow">Event workflow</div>
+          <h2>Policy-driven event timeline</h2>
+          {eventWorkflow ? (
+            <>
+              <div className="facts-grid">
+                <div><span className="label">Selected policy</span><strong>{eventWorkflow.policy}</strong></div>
+                <div><span className="label">Events</span><strong>{eventWorkflow.event_count}</strong></div>
+                <div><span className="label">Scenario</span><strong>{eventWorkflow.scenario}</strong></div>
+              </div>
+              <p className="runbook-summary">{eventWorkflow.runbook_summary}</p>
+              {eventWorkflow.events.length > 0 ? (
+                <table>
+                  <thead><tr><th>Time</th><th>Severity</th><th>Subsystem</th><th>Trigger</th><th>Operator check</th></tr></thead>
+                  <tbody>
+                    {eventWorkflow.events.map((event) => (
+                      <tr key={event.event_id}>
+                        <td>{formatDate(event.event_time)}</td>
+                        <td><Badge tone={event.severity === 'critical' ? 'stale' : 'warning'}>{event.severity}</Badge></td>
+                        <td>{event.subsystem}</td>
+                        <td>{event.triggered_by}: {formatNumber(event.measurement_value, 2)} / threshold {formatNumber(event.threshold, 2)}</td>
+                        <td>{event.recommended_operator_check}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : <p className="hint">No warning or critical events generated for this scenario/policy.</p>}
+            </>
+          ) : <p className="hint">Run the simulated workflow to generate warning/critical events and a runbook-style summary.</p>}
+        </section>
+
+        <section className="card policy-card">
+          <div className="section-eyebrow">Operations policy comparison</div>
+          <h2>Alert timing and tradeoffs</h2>
+          {policyComparison ? (
+            <table>
+              <thead><tr><th>Policy</th><th>Events</th><th>First warning</th><th>First critical</th><th>Top subsystem</th><th>Recommended action</th></tr></thead>
+              <tbody>
+                {Object.entries(policyComparison.policies).map(([name, summary]) => (
+                  <tr key={name}>
+                    <td>{name}</td>
+                    <td>{summary.event_count}</td>
+                    <td>{formatDate(summary.first_warning_time)}</td>
+                    <td>{formatDate(summary.first_critical_time)}</td>
+                    <td>{summary.top_affected_subsystem ?? 'None'}</td>
+                    <td>{summary.recommended_operator_action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p className="hint">Comparison uses the same simulated stream across conservative, balanced, and relaxed policies.</p>}
         </section>
 
         <MissionMap position={position} contactWindows={contactWindows} station={station} />

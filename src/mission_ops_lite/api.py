@@ -31,6 +31,7 @@ from .propagation import (
     parse_requested_at,
     propagate_sgp4_position,
 )
+from .simulated_telemetry import compare_policies, generate_events, simulate_telemetry
 from .store import SQLiteCatalogStore
 
 
@@ -247,6 +248,74 @@ def create_app(
                 "No RF link budget, antenna mask, terrain, weather, or scheduling constraints",
             ],
         )
+
+    @app.get("/satellites/{norad_cat_id}/telemetry/simulated")
+    def get_simulated_telemetry(
+        norad_cat_id: int,
+        scenario: str = Query(default="nominal"),
+        seed: Optional[int] = Query(default=None),
+        duration_minutes: int = Query(default=60, ge=1, le=1440),
+        step_seconds: int = Query(default=60, ge=1, le=3600),
+    ) -> dict[str, Any]:
+        record = app.state.catalog.get_satellite(norad_cat_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Satellite not found")
+        try:
+            return simulate_telemetry(
+                record,
+                scenario=scenario,
+                seed=seed,
+                duration_minutes=duration_minutes,
+                step_seconds=step_seconds,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/satellites/{norad_cat_id}/events/simulated")
+    def get_simulated_events(
+        norad_cat_id: int,
+        scenario: str = Query(default="nominal"),
+        policy: str = Query(default="balanced_ops"),
+        seed: Optional[int] = Query(default=None),
+        duration_minutes: int = Query(default=60, ge=1, le=1440),
+        step_seconds: int = Query(default=60, ge=1, le=3600),
+    ) -> dict[str, Any]:
+        record = app.state.catalog.get_satellite(norad_cat_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Satellite not found")
+        try:
+            return generate_events(
+                record,
+                scenario=scenario,
+                policy=policy,
+                seed=seed,
+                duration_minutes=duration_minutes,
+                step_seconds=step_seconds,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/satellites/{norad_cat_id}/ops-policy-comparison")
+    def get_ops_policy_comparison(
+        norad_cat_id: int,
+        scenario: str = Query(default="thermal_drift"),
+        seed: Optional[int] = Query(default=None),
+        duration_minutes: int = Query(default=60, ge=1, le=1440),
+        step_seconds: int = Query(default=60, ge=1, le=3600),
+    ) -> dict[str, Any]:
+        record = app.state.catalog.get_satellite(norad_cat_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Satellite not found")
+        try:
+            return compare_policies(
+                record,
+                scenario=scenario,
+                seed=seed,
+                duration_minutes=duration_minutes,
+                step_seconds=step_seconds,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/satellites/{norad_cat_id}", response_model=SatelliteResponse, response_model_exclude_none=True)
     def get_satellite(

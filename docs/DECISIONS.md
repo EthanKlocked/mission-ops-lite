@@ -58,3 +58,20 @@
 - Ground-station inputs: manual and presets only; no browser geolocation request by default.
 - Repo quality pass: add GitHub Actions for backend pytest and frontend build, update API description/CORS for local dashboard use, and document run/build commands.
 - Follow-up after dashboard review: simulated telemetry plus anomaly/event workflow layered on top of public orbit context.
+
+## PR 6
+
+- Branching: PR6 implementation started from `feat/operator-dashboard`; after PR5 was merged, `origin/main` contains the operator dashboard commit, so PR6 can be prepared as a normal feature PR against `main`.
+- Scope: add a simulation-backed subsystem-health workflow on top of public CelesTrak orbit context. This is not live spacecraft telemetry and not a mission operations system.
+- Endpoint set:
+  - `GET /satellites/{norad_cat_id}/telemetry/simulated`
+  - `GET /satellites/{norad_cat_id}/events/simulated`
+  - `GET /satellites/{norad_cat_id}/ops-policy-comparison`
+- Simulation design: deterministic local generator seeded by satellite ID, scenario, and seed value; no external telemetry, secrets, paid APIs, persistence, or deployment.
+- Scenario profiles: `nominal`, `thermal_drift`, `power_drop`, `comms_degradation`.
+- Subsystems modeled: `power`, `thermal`, `communications`, `payload`, and `attitude_mode`.
+- Policy profiles: `conservative_ops`, `balanced_ops`, and `relaxed_ops`, with different thresholds and persistence requirements.
+- Event behavior: warning/critical events are generated from simulated telemetry samples and include explicit `is_simulated: true` lineage.
+- Policy comparison: the same simulated telemetry stream is run through all policy profiles to show event count/timing/recommendation differences.
+- Dashboard approach: modest extension of the existing operator dashboard with scenario/policy controls, health tiles, event timeline, runbook summary, and policy comparison. No broad redesign.
+- Public wording: use “simulated spacecraft telemetry”, “simulation-backed subsystem health”, “operator-facing event timeline”, and “runbook-style summary”; avoid implying live telemetry, real spacecraft health, mission control, or validated anomaly detection.

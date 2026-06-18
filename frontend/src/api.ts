@@ -1,8 +1,11 @@
 import type {
   ContactWindowListResponse,
+  OpsPolicyComparisonResponse,
   SatelliteListResponse,
   SatellitePositionResponse,
   SatelliteRecord,
+  SimulatedEventWorkflowResponse,
+  SimulatedTelemetryResponse,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -50,6 +53,53 @@ export interface ContactWindowParams {
   end: string;
   step_seconds: number;
   min_elevation_deg: number;
+}
+
+export interface SimulationParams {
+  scenario: string;
+  seed: number;
+  duration_minutes: number;
+  step_seconds: number;
+}
+
+export function getSimulatedTelemetry(
+  noradCatId: number,
+  params: SimulationParams,
+): Promise<SimulatedTelemetryResponse> {
+  const query = new URLSearchParams({
+    scenario: params.scenario,
+    seed: String(params.seed),
+    duration_minutes: String(params.duration_minutes),
+    step_seconds: String(params.step_seconds),
+  });
+  return requestJson(`/satellites/${noradCatId}/telemetry/simulated?${query.toString()}`);
+}
+
+export function getSimulatedEvents(
+  noradCatId: number,
+  params: SimulationParams & { policy: string },
+): Promise<SimulatedEventWorkflowResponse> {
+  const query = new URLSearchParams({
+    scenario: params.scenario,
+    policy: params.policy,
+    seed: String(params.seed),
+    duration_minutes: String(params.duration_minutes),
+    step_seconds: String(params.step_seconds),
+  });
+  return requestJson(`/satellites/${noradCatId}/events/simulated?${query.toString()}`);
+}
+
+export function getOpsPolicyComparison(
+  noradCatId: number,
+  params: SimulationParams,
+): Promise<OpsPolicyComparisonResponse> {
+  const query = new URLSearchParams({
+    scenario: params.scenario,
+    seed: String(params.seed),
+    duration_minutes: String(params.duration_minutes),
+    step_seconds: String(params.step_seconds),
+  });
+  return requestJson(`/satellites/${noradCatId}/ops-policy-comparison?${query.toString()}`);
 }
 
 export function getContactWindows(
