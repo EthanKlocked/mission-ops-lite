@@ -12,7 +12,7 @@ The current system ingests public CelesTrak active GP orbit metadata, normalizes
 - An SGP4-derived approximate position API from public orbit elements.
 - A ground-station visibility/contact-window planning API derived from approximate positions.
 - A local operator dashboard for reviewing source lineage, freshness, approximate position, and contact-window estimates.
-- A foundation for later simulated telemetry and operations-policy comparison.
+- A simulation-backed subsystem-health workflow with deterministic telemetry scenarios, warning/critical events, operations-policy comparison, and runbook-style summaries.
 
 ## What this is not
 
@@ -23,7 +23,7 @@ The current system ingests public CelesTrak active GP orbit metadata, normalizes
 - Not flight software.
 - No mission-grade validation claim.
 - Not live spacecraft telemetry or real-time spacecraft tracking.
-- Simulated telemetry, when added in later PRs, is not real spacecraft telemetry.
+- Simulated telemetry in this project is generated locally and is not real spacecraft telemetry.
 - This is not a fake satellite control console.
 
 ## Data lineage labels
@@ -34,7 +34,26 @@ Timestamp fields:
 
 - `epoch`: source event time from the CelesTrak `EPOCH` field.
 - `ingested_at`: local time when the source record was normalized into the catalog.
-- `generated_at`: reserved for future simulated/derived data; not emitted in PR 1.
+- `generated_at`: timestamp for derived/simulated outputs generated locally by the API.
+
+## Simulated telemetry and event workflow
+
+The telemetry and event workflow in this project is simulation-backed. It is layered on top of public CelesTrak orbit context to demonstrate operational data modeling patterns: subsystem health, timestamp lineage, warning/critical thresholds, event timelines, policy-driven alerting, and runbook-style operator summaries. It does not ingest live spacecraft telemetry and is not suitable for mission operations.
+
+Implemented scenarios:
+
+- `nominal`
+- `thermal_drift`
+- `power_drop`
+- `comms_degradation`
+
+Implemented operations policy profiles:
+
+- `conservative_ops`: lower warning/critical thresholds and faster escalation.
+- `balanced_ops`: short persistence before escalation to balance sensitivity and alert fatigue.
+- `relaxed_ops`: higher thresholds and longer persistence for fewer, later alerts.
+
+Simulation outputs are deterministic when the same satellite, scenario, seed, duration, and step are requested.
 
 Raw CelesTrak records are preserved on internal normalized records for traceability. API responses intentionally do not include `raw_record` unless the caller explicitly requests it on the detail endpoint with `?include_raw=true`.
 
@@ -141,6 +160,43 @@ Example:
 curl 'http://127.0.0.1:8000/satellites/25544/contact-windows?ground_station_name=Pacific%20demo%20station&latitude_deg=8.45&longitude_deg=-106.20&altitude_m=0&start=2026-05-28T02:45:00Z&end=2026-05-28T03:20:00Z&step_seconds=30&min_elevation_deg=10'
 ```
 
+### `GET /satellites/{norad_cat_id}/telemetry/simulated?...`
+
+Returns deterministic simulated spacecraft telemetry for a selected satellite. Query parameters:
+
+- `scenario`: one of `nominal`, `thermal_drift`, `power_drop`, `comms_degradation`.
+- `seed`: optional deterministic seed.
+- `duration_minutes`: simulation duration, default `60`.
+- `step_seconds`: sample interval, default `60`.
+
+Each response includes `data_kind: simulated_telemetry`, `simulation_version`, `generated_at`, satellite identity, limitations, and samples with source event time, generated time, sequence count, subsystem, measurement, unit, status, and quality flag.
+
+Example:
+
+```bash
+curl 'http://127.0.0.1:8000/satellites/25544/telemetry/simulated?scenario=thermal_drift&seed=42&duration_minutes=60&step_seconds=300'
+```
+
+### `GET /satellites/{norad_cat_id}/events/simulated?...`
+
+Generates warning/critical events from the simulated telemetry stream under an operations policy profile. Query parameters include `scenario`, `policy`, `seed`, `duration_minutes`, and `step_seconds`.
+
+Example:
+
+```bash
+curl 'http://127.0.0.1:8000/satellites/25544/events/simulated?scenario=thermal_drift&policy=balanced_ops&seed=42'
+```
+
+### `GET /satellites/{norad_cat_id}/ops-policy-comparison?...`
+
+Runs the same simulated telemetry stream through `conservative_ops`, `balanced_ops`, and `relaxed_ops`, returning event counts, first warning/critical timing, top affected subsystem, recommended operator action, and policy notes.
+
+Example:
+
+```bash
+curl 'http://127.0.0.1:8000/satellites/25544/ops-policy-comparison?scenario=thermal_drift&seed=42'
+```
+
 ### `GET /ingestion-runs`
 
 Returns recent ingestion attempts from SQLite, including source URL, status, record count, and error details when available.
@@ -216,6 +272,9 @@ curl http://127.0.0.1:8000/satellites/25544
 curl 'http://127.0.0.1:8000/satellites/25544?include_raw=true'
 curl 'http://127.0.0.1:8000/satellites/25544/position?at=2026-05-28T03:00:00Z'
 curl 'http://127.0.0.1:8000/satellites/25544/contact-windows?latitude_deg=8.45&longitude_deg=-106.20&start=2026-05-28T02:45:00Z&end=2026-05-28T03:20:00Z'
+curl 'http://127.0.0.1:8000/satellites/25544/telemetry/simulated?scenario=thermal_drift&seed=42&duration_minutes=60&step_seconds=300'
+curl 'http://127.0.0.1:8000/satellites/25544/events/simulated?scenario=thermal_drift&policy=balanced_ops&seed=42'
+curl 'http://127.0.0.1:8000/satellites/25544/ops-policy-comparison?scenario=thermal_drift&seed=42'
 ```
 
 ## Test strategy
@@ -229,6 +288,9 @@ The tests mock the CelesTrak HTTP response through `httpx.MockTransport`, so the
 - API response bounds so raw records are not exposed by default.
 - SGP4-derived approximate position metadata, missing-satellite handling, and insufficient-orbit-element handling.
 - Ground-station contact-window responses, empty-window handling, invalid time ranges, and missing-satellite handling.
+- Simulated telemetry scenario generation, fixed-seed determinism, unknown scenario validation, and missing-satellite handling.
+- Simulated event workflow thresholding, warning/critical event payloads, policy validation, and runbook-style summaries.
+- Operations-policy comparison across conservative, balanced, and relaxed profiles using the same simulated telemetry stream.
 - Frontend build verification for the local operator dashboard.
 
 ## Dashboard workflow
@@ -241,6 +303,8 @@ The local dashboard under `frontend/` presents the existing backend flow:
 4. Review source attribution, source epoch, ingestion time, and freshness status.
 5. Request an SGP4-derived approximate position for a chosen timestamp.
 6. Enter a preset/manual ground station and estimate approximate contact windows.
-7. View a simple 2D map-style context panel for satellite and ground-station orientation.
+7. Generate deterministic simulated telemetry for a selected scenario/seed.
+8. Review subsystem health tiles, policy-driven event timeline, runbook-style summary, and policy comparison.
+9. View a simple 2D map-style context panel for satellite and ground-station orientation.
 
-Dashboard labels intentionally keep the same boundaries as the API: public orbit data in, approximate derived estimates out, no live telemetry, no validated scheduling, and no mission-grade claim.
+Dashboard labels intentionally keep the same boundaries as the API: public orbit data in, approximate derived estimates and simulated telemetry out, no live telemetry, no validated scheduling, and no mission-grade claim.

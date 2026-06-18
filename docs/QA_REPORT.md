@@ -80,7 +80,7 @@ Follow-up actions from QA were addressed by adding mocked end-to-end ingestion A
 - Live ingestion can be rate/update-window limited by CelesTrak.
 - SGP4 position and contact-window outputs are approximate derived data from public orbit elements, not live telemetry or mission-grade flight dynamics/contact validation.
 - Contact-window calculation does not model RF link budget, antenna masks, terrain, weather, scheduling conflicts, or operational constraints.
-- Simulated telemetry summary and operations policy comparison are not implemented by design.
+- Simulated telemetry summary and operations policy comparison are now implemented as a local deterministic simulation layer, not live telemetry.
 
 ## PR 2 verification
 
@@ -296,4 +296,105 @@ git grep -n -i 'portfolio\|포트폴리오' -- ':!docs/QA_REPORT.md' ':!docs/DEC
 Result: no public-facing matches.
 
 Overclaim scan found only explicit non-goal/limitation language for live telemetry, real-time tracking, RF/downlink, telecommand, and mission-grade claims.
+
+## PR 6 simulated telemetry verification
+
+### TDD red check
+
+```bash
+uv run --extra dev python -m pytest tests/test_pr6_simulated_telemetry.py tests/test_pr6_event_workflow.py tests/test_pr6_policy_comparison.py -q
+```
+
+Initial result before endpoint implementation:
+
+```text
+7 failed, 1 passed
+```
+
+Expected failure mode: new PR6 routes returned `404 Not Found` before the simulated telemetry, event, and policy comparison endpoints existed.
+
+### Targeted simulated telemetry/event tests
+
+```bash
+uv run --extra dev python -m pytest tests/test_pr6_simulated_telemetry.py tests/test_pr6_event_workflow.py tests/test_pr6_policy_comparison.py -q
+```
+
+Result after implementation:
+
+```text
+8 passed
+```
+
+Coverage added:
+
+- Fixed seed determinism for simulated telemetry.
+- Required scenarios: `nominal`, `thermal_drift`, `power_drop`, `comms_degradation`.
+- Explicit `data_kind: simulated_telemetry` and limitations saying outputs are not real/live spacecraft telemetry.
+- Missing satellite handling (`404`) and unknown scenario/policy validation (`422`).
+- Nominal scenario produces no warning/critical events under `balanced_ops`.
+- Thermal drift scenario produces warning/critical simulated events with event payload lineage and recommended operator checks.
+- Policy comparison shows different event counts, timing, and recommendations across `conservative_ops`, `balanced_ops`, and `relaxed_ops` for the same simulated stream.
+
+### Full backend regression, frontend audit, frontend build
+
+```bash
+uv run --extra dev python -m pytest -q
+cd frontend
+npm audit --audit-level=moderate
+npm run build
+```
+
+Observed result during implementation:
+
+```text
+23 passed
+found 0 vulnerabilities
+vite v6.4.3 building for production...
+✓ built
+```
+
+### Local API smoke
+
+Backend command used for smoke testing:
+
+```bash
+PYTHONPATH=src uv run python -m uvicorn mission_ops_lite.api:app --host 127.0.0.1 --port 8000
+```
+
+Smoke results:
+
+```text
+GET /health -> 200 {"status":"ok"}
+POST /ingest/celestrak -> 200, count 15811
+GET /satellites/25544/ops-policy-comparison?scenario=thermal_drift&seed=42&duration_minutes=60&step_seconds=300 -> 200
+```
+
+Policy comparison smoke showed:
+
+```text
+conservative_ops: event_count 2, earlier warning/critical timing
+balanced_ops: event_count 2, later warning/critical timing
+relaxed_ops: event_count 1, no critical in the sampled window
+```
+
+### Browser smoke
+
+Browser-tested dashboard at:
+
+```text
+http://127.0.0.1:5173
+```
+
+Observed flow:
+
+1. Dashboard loaded with backend health `ok`.
+2. Cached/live CelesTrak catalog loaded after local ingest.
+3. Simulated telemetry panel displayed scenario and policy controls.
+4. Generated simulated workflow for default `thermal_drift`, `balanced_ops`, seed `42`.
+5. Page contained `simulated_telemetry`, policy-driven event workflow content, and thermal event/policy output.
+6. Browser console reported no JavaScript errors after the simulated workflow smoke.
+
+### Public wording/framing scan
+
+Public-facing wording scan was run before final commit preparation. Internal docs may mention career/portfolio context, but README/source/frontend public-facing wording keeps the artifact framed as a standalone technical project with explicit simulated/not-live limitations.
 

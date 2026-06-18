@@ -1,4 +1,5 @@
 export type FreshnessStatus = 'fresh' | 'stale' | 'unknown';
+export type Severity = 'info' | 'warning' | 'critical';
 
 export interface DataSource {
   name: string;
@@ -87,5 +88,82 @@ export interface ContactWindowListResponse {
   epoch_age_hours: number | null;
   count: number;
   windows: ContactWindow[];
+  limitations: string[];
+}
+
+export interface SimulatedTelemetrySample {
+  source_event_time: string;
+  generated_at: string;
+  sequence_count: number;
+  subsystem: string;
+  measurement_name: string;
+  measurement_value: number;
+  unit: string;
+  status: Severity;
+  quality_flag: string;
+}
+
+export interface SimulatedTelemetryResponse {
+  data_kind: 'simulated_telemetry';
+  scenario: string;
+  simulation_version: string;
+  generated_at: string;
+  seed: number | null;
+  norad_cat_id: number;
+  object_name: string;
+  duration_minutes: number;
+  step_seconds: number;
+  source_orbit_epoch: string;
+  limitations: string[];
+  samples: SimulatedTelemetrySample[];
+}
+
+export interface SimulatedEvent {
+  event_id: string;
+  event_time: string;
+  subsystem: string;
+  severity: Severity;
+  scenario: string;
+  policy: string;
+  triggered_by: string;
+  measurement_value: number;
+  threshold: number;
+  summary: string;
+  recommended_operator_check: string;
+  is_simulated: boolean;
+}
+
+export interface SimulatedEventWorkflowResponse {
+  data_kind: 'simulated_event_workflow';
+  scenario: string;
+  policy: string;
+  simulation_version: string;
+  generated_at: string;
+  seed: number | null;
+  norad_cat_id: number;
+  object_name: string;
+  event_count: number;
+  events: SimulatedEvent[];
+  runbook_summary: string;
+  limitations: string[];
+}
+
+export interface PolicySummary {
+  event_count: number;
+  first_warning_time: string | null;
+  first_critical_time: string | null;
+  top_affected_subsystem: string | null;
+  recommended_operator_action: string;
+  policy_notes: string;
+}
+
+export interface OpsPolicyComparisonResponse {
+  data_kind: 'simulated_ops_policy_comparison';
+  scenario: string;
+  simulation_version: string;
+  seed: number | null;
+  norad_cat_id: number;
+  object_name: string;
+  policies: Record<string, PolicySummary>;
   limitations: string[];
 }
