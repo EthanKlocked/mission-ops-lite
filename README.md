@@ -306,6 +306,49 @@ curl 'http://127.0.0.1:8000/satellites/25544/events/simulated?scenario=thermal_d
 curl 'http://127.0.0.1:8000/satellites/25544/ops-policy-comparison?scenario=thermal_drift&seed=42'
 ```
 
+## Data platform extension: PySpark, Databricks-style Medallion, and Snowflake OLAP
+
+This repository also includes a local-first data engineering extension that models how the same public orbit catalog could move through a Databricks/Spark Medallion pipeline and into a Snowflake-style OLAP mart.
+
+Pipeline shape:
+
+```text
+CelesTrak raw GP records
+  -> Bronze: raw/source-shaped records with raw JSON and ingestion lineage
+  -> Silver: normalized orbit snapshots with typed columns, deduplication, freshness, and quality labels
+  -> Gold: OLAP-ready freshness/count metrics
+  -> Snowflake SQL: warehouse/schema/table/load/query contracts for KPI analysis
+```
+
+Key files:
+
+```text
+src/mission_ops_lite/data_platform/medallion.py
+src/mission_ops_lite/data_platform/run_local_medallion.py
+notebooks/databricks/01_bronze_ingest.py
+notebooks/databricks/02_silver_transform.py
+notebooks/databricks/03_gold_metrics.py
+sql/snowflake/01_create_olap_schema.sql
+sql/snowflake/02_create_gold_tables.sql
+sql/snowflake/03_load_gold_metrics.sql
+sql/snowflake/04_analysis_queries.sql
+data/sample/celestrak_active_gp_sample.json
+```
+
+Run the local PySpark pipeline:
+
+```bash
+uv run --extra data python -m mission_ops_lite.data_platform.run_local_medallion
+```
+
+Run the data-platform tests:
+
+```bash
+uv run --extra dev --extra data python -m pytest tests/test_pr10_data_platform_medallion.py tests/test_pr10_data_platform_artifacts.py -q
+```
+
+The Databricks notebooks reuse the same transformation functions but call `saveAsTable(...)` for Bronze/Silver/Gold table materialization. The Snowflake SQL files are intentionally credential-free artifacts: they define the OLAP schema, staged Parquet load contract, and analytical freshness/quality queries. Live Databricks/Snowflake workspace execution requires separately approved credentials and cloud configuration.
+
 ## Test strategy
 
 The tests mock the CelesTrak HTTP response through `httpx.MockTransport`, so they can run without network access. They cover:
@@ -321,6 +364,7 @@ The tests mock the CelesTrak HTTP response through `httpx.MockTransport`, so the
 - Simulated event workflow thresholding, warning/critical event payloads, policy validation, and runbook-style summaries.
 - Operations-policy comparison across conservative, balanced, and relaxed profiles using the same simulated telemetry stream.
 - Frontend build verification for the local operator dashboard.
+- Data-platform extension behavior: PySpark Bronze raw lineage preservation, Silver typed/deduplicated orbit snapshots, Gold OLAP freshness metrics, Databricks notebook reuse of shared transforms, and Snowflake OLAP SQL artifacts.
 
 ## Dashboard workflow
 

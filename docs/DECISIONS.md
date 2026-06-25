@@ -84,4 +84,23 @@
 - Response framing: “SGP4-derived approximate orbit playback from public orbit elements.”
 - Frontend stack addition: `three`, `@react-three/fiber`, and `@react-three/drei` pinned to React 18-compatible versions.
 - Visualization approach: procedural local globe, orbit path, moving satellite marker, play/pause/reset/speed/scrub controls. No external map or globe service.
+- UI dogfood stabilization: catalog status feedback, search no-match state, reviewer-friendly CelesTrak source-limit copy with cached-data CTA, contact-window zero-state, derived-panel preservation note, and screenshot-safe orbit legend.
 - Explicit non-goals: no Cesium, no Cesium Ion token, no external map service, no live spacecraft tracking claim, no mission-grade flight dynamics validation, and no live telemetry/RF/downlink/telecommand expansion.
+
+## PR 10
+
+- Scope: frontend audit lockfile cleanup after PR #9.
+- Updated transitive `nanoid` and `postcss` lockfile entries through `npm audit fix` without feature changes.
+- Verification: backend tests and frontend build passed in CI; local frontend audit reported 0 vulnerabilities.
+
+## Data platform / Medallion candidate
+
+- Scope: add a credential-free data platform extension that demonstrates Databricks-style Medallion Architecture and Snowflake OLAP modeling over the existing public CelesTrak orbit catalog domain.
+- Dependency split: `pyspark` is optional under the `data` extra and Snowflake connector is optional under the `cloud` extra so the core API/dashboard remains lightweight.
+- Transform design: shared PySpark functions live in `mission_ops_lite.data_platform.medallion`; local tests and Databricks notebooks reuse the same logic instead of duplicating business rules.
+- Bronze layer: preserve source-shaped fields, raw source JSON, CelesTrak source metadata, ingestion timestamp, and ingestion date for replay/traceability.
+- Silver layer: cast analytical columns, parse source epoch, deduplicate satellite/epoch snapshots, compute 72-hour freshness, and label missing-epoch quality issues.
+- Gold layer: produce small OLAP-ready freshness/quality metrics suitable for Snowflake loading and KPI queries.
+- Databricks artifacts: notebook-style Python files use workspace `spark`, read/write tables, and call `saveAsTable`; they are implementation templates rather than a claim that a live workspace is configured.
+- Snowflake artifacts: SQL files define schema/table/stage/load/query contracts without credentials or account-specific secrets.
+- Public wording: describe this as hands-on/local-first data engineering practice. Do not imply production Databricks/Snowflake operation, live spacecraft telemetry, or managed cloud deployment.

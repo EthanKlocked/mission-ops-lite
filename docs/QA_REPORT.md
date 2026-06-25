@@ -74,6 +74,84 @@ Verdict: pass
 
 Follow-up actions from QA were addressed by adding mocked end-to-end ingestion API coverage and documenting CelesTrak repeated-download `403` behavior.
 
+## PR 10 data platform verification
+
+### TDD red checks
+
+```bash
+uv run --extra dev --extra data python -m pytest tests/test_pr10_data_platform_medallion.py tests/test_pr10_data_platform_artifacts.py -q
+```
+
+Initial results:
+
+- First run failed before implementation because the `data` optional dependency was not defined.
+- After adding the tests and before adding artifacts, expected failures covered the missing `mission_ops_lite.data_platform.medallion` module, missing Databricks notebooks, and missing Snowflake SQL files.
+- A timezone assertion was adjusted to use Spark `date_format(...)` rather than Python `collect()` rendering because PySpark displays timestamps in the Spark session timezone but collected Python datetimes render in the host timezone.
+
+### Targeted data-platform tests
+
+```bash
+uv run --extra dev --extra data python -m pytest tests/test_pr10_data_platform_medallion.py tests/test_pr10_data_platform_artifacts.py -q
+```
+
+Result:
+
+```text
+6 passed
+```
+
+Coverage:
+
+- Bronze layer preserves raw source JSON, ingestion date, CelesTrak source name/URL/type, and source-shaped values.
+- Silver layer parses timestamps, casts numeric fields, deduplicates duplicate satellite/epoch rows, and labels `fresh`, `stale`, `unknown`, `valid`, and `invalid_missing_epoch` cases.
+- Gold layer produces OLAP-ready freshness/quality metrics with satellite counts and epoch-age aggregates.
+- Local Parquet writes create Bronze/Silver/Gold output directories.
+- Databricks notebook scripts reuse the shared medallion module and materialize tables with `saveAsTable`.
+- Snowflake SQL artifacts define the OLAP table, internal stage/load contract, and analytical freshness/quality queries.
+
+### Full backend regression
+
+```bash
+uv run --extra dev python -m pytest -q
+```
+
+Result:
+
+```text
+29 passed
+```
+
+### Local PySpark smoke
+
+```bash
+uv run --extra data python -m mission_ops_lite.data_platform.run_local_medallion --input-json data/sample/celestrak_active_gp_sample.json --output-root data/medallion
+```
+
+Result:
+
+```text
+bronze: data/medallion/bronze_orbit_records
+silver: data/medallion/silver_orbit_snapshots
+gold: data/medallion/gold_orbit_freshness_metrics
+data/medallion/bronze_orbit_records: parquet_files=2
+data/medallion/gold_orbit_freshness_metrics: parquet_files=1
+data/medallion/silver_orbit_snapshots: parquet_files=1
+```
+
+The generated local Parquet outputs are ignored by git via `data/medallion/`.
+
+### Security/wording checks
+
+```bash
+git diff added-line security scan
+git grep -n -i 'production Databricks\|production Snowflake\|live spacecraft telemetry\|real spacecraft health\|mission control\|flight operations system\|validated spacecraft anomaly detection' -- README.md docs src notebooks sql tests ':!docs/DECISIONS.md' || true
+```
+
+Result:
+
+- Added-line security scan: no hardcoded secret/shell/eval/pickle/SQL-string-format hits.
+- Wording grep only found existing limitation statements that explicitly say the project is not live spacecraft telemetry or mission-grade operations.
+
 ## Limitations remaining
 
 - Catalog storage now persists locally in SQLite, but there is still no managed remote database.
