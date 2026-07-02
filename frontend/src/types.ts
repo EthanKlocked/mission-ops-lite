@@ -57,6 +57,33 @@ export interface SatellitePositionResponse {
   limitations: string[];
 }
 
+export interface OrbitTrackPoint {
+  sequence: number;
+  timestamp: string;
+  position_km: Vector3;
+  velocity_km_s: Vector3;
+  approximate_geodetic: ApproximateGeodeticPosition;
+}
+
+export interface OrbitTrackResponse {
+  object_name: string;
+  norad_cat_id: number;
+  source: DataSource;
+  source_epoch: string;
+  start: string;
+  end: string;
+  step_seconds: number;
+  sample_count: number;
+  propagator: string;
+  coordinate_frame: string;
+  visualization_mode: string;
+  freshness_status: FreshnessStatus;
+  epoch_age_hours: number | null;
+  is_approximate: boolean;
+  points: OrbitTrackPoint[];
+  limitations: string[];
+}
+
 export interface GroundStation {
   name: string;
   latitude_deg: number;

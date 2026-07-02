@@ -1,119 +1,94 @@
-# Simulated Telemetry and Event Workflow Implementation Plan
+# Approximate 3D Orbit Playback Implementation Plan
 
-> **For Hermes:** Use test-driven-development and requesting-code-review skills before commit.
+**Goal:** Add approximate 3D orbit playback using existing SGP4 propagation and local dashboard rendering.
 
-**Goal:** Add a clearly labeled simulated telemetry and simulated event workflow layer on top of public CelesTrak orbit context.
+**Architecture:** Keep the backend as a read-only derived data API over public CelesTrak GP orbit records. Add an `/orbit-track` endpoint that samples existing SGP4 propagation across a bounded time range. Render the track locally in the React dashboard with Three.js/React Three Fiber using a procedural globe, orbit path, moving satellite marker, and playback controls.
 
-**Architecture:** Keep public orbit ingestion, SGP4 position, contact-window estimates, and simulated telemetry as separate data layers. Implement deterministic scenario generation in a backend module, expose read-only FastAPI endpoints, and add modest dashboard panels for scenario controls, subsystem health, events, runbook summary, and policy comparison.
-
-**Tech Stack:** FastAPI, Pydantic-compatible dict responses, pytest, React, TypeScript, Vite, CSS.
+**Tech Stack:** FastAPI, Pydantic-compatible response models, pytest, React, TypeScript, Vite, Three.js, React Three Fiber, local CSS.
 
 ---
 
-## Task 1: Add failing PR6 backend tests
+## Task 1: Add failing PR9 backend tests
 
-**Objective:** Capture the PR6 acceptance criteria before implementation.
+**Objective:** Capture the `/orbit-track` acceptance criteria before implementation.
 
 **Files:**
-- Create: `tests/test_pr6_simulated_telemetry.py`
-- Create: `tests/test_pr6_event_workflow.py`
-- Create: `tests/test_pr6_policy_comparison.py`
+- Create: `tests/test_pr9_orbit_track.py`
 
-**Verification:**
+**Test coverage:**
+- Happy path returns deterministic sampled track points with timestamps, TEME `position_km`, approximate geodetic coordinates, sequence indexes, lineage, and limitations.
+- Unknown satellite returns 404.
+- Invalid time range and invalid step/sample bounds return 422.
+- Response wording states approximate public-orbit-derived playback, not live tracking or mission-grade validation.
+
+**RED verification:**
 
 ```bash
-uv run --extra dev python -m pytest tests/test_pr6_simulated_telemetry.py tests/test_pr6_event_workflow.py tests/test_pr6_policy_comparison.py -q
+uv run --extra dev python -m pytest tests/test_pr9_orbit_track.py -q
 ```
 
-Initial RED result: expected route-not-found failures before the endpoint implementation.
+Expected initial result: route-not-found failure before endpoint implementation.
 
-## Task 2: Implement deterministic simulated telemetry engine
+## Task 2: Implement orbit-track propagation helper
 
-**Objective:** Generate scenario-backed subsystem samples that are deterministic for a fixed satellite/scenario/seed/duration/step.
-
-**Files:**
-- Create: `src/mission_ops_lite/simulated_telemetry.py`
-
-**Implementation notes:**
-- Required scenarios: `nominal`, `thermal_drift`, `power_drop`, `comms_degradation`.
-- Required subsystems: `power`, `thermal`, `communications`, `payload`, `attitude_mode`.
-- Every response includes `data_kind`, `simulation_version`, `generated_at`, `seed`, satellite identity, source orbit epoch, limitations, and sample lineage fields.
-- Limitations explicitly say this is not real/live spacecraft telemetry and not mission-grade operations software.
-
-## Task 3: Implement policy event and comparison logic
-
-**Objective:** Turn telemetry samples into warning/critical events under policy profiles and compare policies over the same stream.
+**Objective:** Reuse `propagate_sgp4_position` to build a bounded sequence of track points.
 
 **Files:**
-- Modify: `src/mission_ops_lite/simulated_telemetry.py`
+- Modify: `src/mission_ops_lite/propagation.py`
+- Modify: `src/mission_ops_lite/models.py`
 
 **Implementation notes:**
-- Required policies: `conservative_ops`, `balanced_ops`, `relaxed_ops`.
-- Policies differ by thresholds and persistence requirements.
-- Event payloads include ID, event time, subsystem, severity, scenario, policy, triggering measurement, value, threshold, summary, recommended operator check, and `is_simulated`.
-- Comparison output includes event counts, first warning/critical time, top affected subsystem, recommended action, and policy notes.
+- Add parser for start/end/step parameters or reuse timestamp parsing where appropriate.
+- Generate inclusive samples from start to end while capping total points.
+- Preserve SGP4/TEME terminology and approximate geodetic conversion.
+- Return limitations that prohibit live tracking/mission-grade interpretation.
 
-## Task 4: Expose read-only FastAPI endpoints
+## Task 3: Expose read-only FastAPI endpoint
 
-**Objective:** Add API routes without adding persistence, external services, secrets, or deployment dependencies.
+**Objective:** Add an API route without persistence, external map services, tokens, or deployment dependencies.
+
+**Endpoint:**
+
+```http
+GET /satellites/{norad_cat_id}/orbit-track?start=<iso>&end=<iso>&step_seconds=120
+```
 
 **Files:**
 - Modify: `src/mission_ops_lite/api.py`
 
-**Endpoints:**
-
-```http
-GET /satellites/{norad_cat_id}/telemetry/simulated
-GET /satellites/{norad_cat_id}/events/simulated
-GET /satellites/{norad_cat_id}/ops-policy-comparison
-```
-
-**Verification:**
+**GREEN verification:**
 
 ```bash
-uv run --extra dev python -m pytest tests/test_pr6_simulated_telemetry.py tests/test_pr6_event_workflow.py tests/test_pr6_policy_comparison.py -q
+uv run --extra dev python -m pytest tests/test_pr9_orbit_track.py -q
+uv run --extra dev python -m pytest -q
 ```
 
-GREEN result observed: `8 passed`.
+## Task 4: Add Three.js/React Three Fiber dashboard playback
 
-## Task 5: Extend dashboard modestly
-
-**Objective:** Add evidence-oriented simulated telemetry workflow panels without redesigning the dashboard.
+**Objective:** Render approximate local orbit playback in the existing dashboard.
 
 **Files:**
+- Modify: `frontend/package.json`
 - Modify: `frontend/src/api.ts`
 - Modify: `frontend/src/types.ts`
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/styles.css`
 
 **UI elements:**
-- Scenario selector.
-- Policy selector.
-- Seed/duration/step controls.
-- Subsystem health tiles.
-- Event timeline.
-- Runbook-style summary.
-- Policy comparison table.
-- Clear simulated/not-live labels.
+- Approximate 3D orbit playback card.
+- Procedural globe, orbit path, and moving satellite marker.
+- Start/end/step controls plus load track button.
+- Play/pause, reset, speed, and scrub controls.
+- Visible copy: public orbit-derived, approximate, no external map service, not live tracking, not mission-grade.
 
-**Verification:**
-
-```bash
-cd frontend
-npm audit --audit-level=moderate
-npm run build
-```
-
-## Task 6: Update docs and PR evidence
-
-**Objective:** Document safe public wording, endpoints, local run commands, test evidence, and limitations.
+## Task 5: Update docs and QA evidence
 
 **Files:**
 - Modify: `README.md`
 - Modify: `docs/CREATOR_HANDOFF.md`
 - Modify: `docs/DECISIONS.md`
 - Modify: `docs/QA_REPORT.md`
-- Create: `.ouroboros/seeds/mission-ops-lite-pr6-simulated-telemetry-events.yaml`
+- Create local-only seed: `.ouroboros/seeds/mission-ops-lite-pr9-approx-3d-orbit-playback.yaml`
 
 **Final verification commands:**
 
@@ -121,5 +96,7 @@ npm run build
 uv run --extra dev python -m pytest -q
 cd frontend && npm audit --audit-level=moderate && npm run build
 git grep -n -i 'portfolio\|포트폴리오' -- ':!docs/QA_REPORT.md' ':!docs/DECISIONS.md' ':!docs/IMPLEMENTATION_PLAN.md' || true
-git grep -n -i 'live telemetry\|real spacecraft health\|mission control\|flight operations system\|validated spacecraft anomaly detection' -- README.md docs src frontend || true
+git grep -n -i 'Cesium\|Ion\|token\|external map\|live tracking\|mission-grade' -- README.md docs src frontend || true
 ```
+
+Allowed occurrences of prohibited terms must be explicit non-goal/boundary statements only.

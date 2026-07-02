@@ -1,6 +1,7 @@
 import type {
   ContactWindowListResponse,
   OpsPolicyComparisonResponse,
+  OrbitTrackResponse,
   SatelliteListResponse,
   SatellitePositionResponse,
   SatelliteRecord,
@@ -42,6 +43,21 @@ export function getSatellite(noradCatId: number): Promise<SatelliteRecord> {
 export function getPosition(noradCatId: number, atIso: string): Promise<SatellitePositionResponse> {
   const query = new URLSearchParams({ at: atIso });
   return requestJson(`/satellites/${noradCatId}/position?${query.toString()}`);
+}
+
+export interface OrbitTrackParams {
+  start: string;
+  end: string;
+  step_seconds: number;
+}
+
+export function getOrbitTrack(noradCatId: number, params: OrbitTrackParams): Promise<OrbitTrackResponse> {
+  const query = new URLSearchParams({
+    start: params.start,
+    end: params.end,
+    step_seconds: String(params.step_seconds),
+  });
+  return requestJson(`/satellites/${noradCatId}/orbit-track?${query.toString()}`);
 }
 
 export interface ContactWindowParams {

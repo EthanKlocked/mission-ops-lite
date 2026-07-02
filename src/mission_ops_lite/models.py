@@ -115,3 +115,30 @@ class ContactWindowListResponse(BaseModel):
     count: int
     windows: list[ContactWindowResponse]
     limitations: list[str]
+
+
+class OrbitTrackPointResponse(BaseModel):
+    sequence: int
+    timestamp: datetime
+    position_km: Vector3
+    velocity_km_s: Vector3
+    approximate_geodetic: ApproximateGeodeticPosition
+
+
+class OrbitTrackResponse(BaseModel):
+    object_name: str
+    norad_cat_id: int
+    source: DataSource
+    source_epoch: datetime
+    start: datetime
+    end: datetime
+    step_seconds: int
+    sample_count: int
+    propagator: str = "SGP4"
+    coordinate_frame: str = "TEME"
+    visualization_mode: str = "approximate_3d_orbit_playback"
+    freshness_status: FreshnessStatus
+    epoch_age_hours: Optional[float]
+    is_approximate: bool = True
+    points: list[OrbitTrackPointResponse]
+    limitations: list[str]

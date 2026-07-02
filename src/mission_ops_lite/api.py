@@ -20,14 +20,19 @@ from .models import (
     ContactWindowResponse,
     FreshnessStatus,
     GroundStationResponse,
+    OrbitTrackPointResponse,
+    OrbitTrackResponse,
     SatelliteListResponse,
     SatelliteOrbitRecord,
     SatellitePositionResponse,
     SatelliteResponse,
 )
 from .propagation import (
+    OrbitTrackInputError,
     PropagationInputError,
     PropagationRuntimeError,
+    estimate_orbit_track,
+    parse_orbit_track_bounds,
     parse_requested_at,
     propagate_sgp4_position,
 )
@@ -246,6 +251,60 @@ def create_app(
                 "Not real-time spacecraft tracking",
                 "Not mission-grade contact validation",
                 "No RF link budget, antenna mask, terrain, weather, or scheduling constraints",
+            ],
+        )
+
+    @app.get(
+        "/satellites/{norad_cat_id}/orbit-track",
+        response_model=OrbitTrackResponse,
+        response_model_exclude_none=True,
+    )
+    def get_orbit_track(
+        norad_cat_id: int,
+        start: str = Query(description="ISO-8601 start timestamp for approximate orbit playback"),
+        end: str = Query(description="ISO-8601 end timestamp for approximate orbit playback"),
+        step_seconds: int = Query(default=120, ge=10, le=3600),
+    ) -> OrbitTrackResponse:
+        record = app.state.catalog.get_satellite(norad_cat_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Satellite not found")
+        try:
+            parsed_start, parsed_end = parse_orbit_track_bounds(start, end)
+            estimate = estimate_orbit_track(
+                record,
+                start=parsed_start,
+                end=parsed_end,
+                step_seconds=step_seconds,
+            )
+        except (OrbitTrackInputError, PropagationInputError, PropagationRuntimeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        return OrbitTrackResponse(
+            object_name=estimate.object_name,
+            norad_cat_id=estimate.norad_cat_id,
+            source=record.source,
+            source_epoch=estimate.source_epoch,
+            start=estimate.start,
+            end=estimate.end,
+            step_seconds=estimate.step_seconds,
+            sample_count=len(estimate.points),
+            freshness_status=cast(FreshnessStatus, estimate.freshness_status),
+            epoch_age_hours=estimate.epoch_age_hours,
+            points=[
+                OrbitTrackPointResponse(
+                    sequence=point.sequence,
+                    timestamp=point.timestamp,
+                    position_km=point.position_km,
+                    velocity_km_s=point.velocity_km_s,
+                    approximate_geodetic=point.approximate_geodetic,
+                )
+                for point in estimate.points
+            ],
+            limitations=[
+                "SGP4-derived approximate orbit playback from public orbit elements.",
+                "Not live spacecraft tracking",
+                "Not mission-grade flight dynamics validation",
+                "No Cesium, Cesium Ion token, or external map service required",
             ],
         )
 

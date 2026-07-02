@@ -2,7 +2,7 @@
 
 Mission Ops Lite is a lightweight backend and local dashboard for public satellite orbit data ingestion, derived position estimates, and operations-planning workflows.
 
-The current system ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, exposes bounded catalog/detail APIs, and provides a local operator-facing dashboard. It can also derive approximate satellite positions and ground-station contact windows for requested timestamps using SGP4 and public orbit elements.
+The current system ingests public CelesTrak active GP orbit metadata, normalizes records, preserves raw traceability internally, stores the latest catalog in SQLite, exposes bounded catalog/detail APIs, and provides a local operator-facing dashboard. It can also derive approximate satellite positions, 3D orbit-playback tracks, and ground-station contact windows for requested timestamps using SGP4 and public orbit elements.
 
 ## What this is
 
@@ -10,8 +10,9 @@ The current system ingests public CelesTrak active GP orbit metadata, normalizes
 - A public satellite/orbit catalog ingestion service using CelesTrak GP JSON.
 - A timestamp-lineage demonstration that separates source event time from ingestion time.
 - An SGP4-derived approximate position API from public orbit elements.
+- An approximate 3D orbit-playback track API for local dashboard visualization.
 - A ground-station visibility/contact-window planning API derived from approximate positions.
-- A local operator dashboard for reviewing source lineage, freshness, approximate position, and contact-window estimates.
+- A local operator dashboard for reviewing source lineage, freshness, approximate position, 3D orbit playback, and contact-window estimates.
 - A simulation-backed subsystem-health workflow with deterministic telemetry scenarios, warning/critical events, operations-policy comparison, and runbook-style summaries.
 
 ## What this is not
@@ -23,6 +24,7 @@ The current system ingests public CelesTrak active GP orbit metadata, normalizes
 - Not flight software.
 - No mission-grade validation claim.
 - Not live spacecraft telemetry or real-time spacecraft tracking.
+- No Cesium, Cesium Ion token, or external map service dependency for the 3D globe.
 - Simulated telemetry in this project is generated locally and is not real spacecraft telemetry.
 - This is not a fake satellite control console.
 
@@ -126,6 +128,33 @@ Example:
 
 ```bash
 curl 'http://127.0.0.1:8000/satellites/25544/position?at=2026-05-28T03:00:00Z'
+```
+
+### `GET /satellites/{norad_cat_id}/orbit-track?start=...&end=...&step_seconds=...`
+
+Returns a bounded sequence of SGP4-derived approximate track points for local 3D orbit playback.
+
+Required query parameters:
+
+- `start`: ISO-8601 start timestamp.
+- `end`: ISO-8601 end timestamp.
+
+Optional query parameters:
+
+- `step_seconds`: sampling interval from `10` to `3600`, default `120`.
+
+Important framing:
+
+- The response samples public orbit elements through the same approximate SGP4 propagation used by the position endpoint.
+- Each point includes timestamp, sequence, TEME `position_km`, TEME `velocity_km_s`, and approximate geodetic latitude/longitude/altitude.
+- The endpoint is read-only and does not store derived track outputs in SQLite.
+- The dashboard renders the track with local Three.js/React Three Fiber primitives and does not require Cesium, Cesium Ion tokens, or external map services.
+- This endpoint is not live spacecraft tracking or mission-grade flight dynamics validation.
+
+Example:
+
+```bash
+curl 'http://127.0.0.1:8000/satellites/25544/orbit-track?start=2026-05-28T03:00:00Z&end=2026-05-28T04:30:00Z&step_seconds=180'
 ```
 
 ### `GET /satellites/{norad_cat_id}/contact-windows?...`

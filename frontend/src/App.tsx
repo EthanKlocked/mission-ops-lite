@@ -1,9 +1,12 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { Line, OrbitControls } from '@react-three/drei';
 import {
   apiBaseUrl,
   checkHealth,
   getContactWindows,
   getOpsPolicyComparison,
+  getOrbitTrack,
   getPosition,
   getSatellite,
   getSimulatedEvents,
@@ -11,11 +14,13 @@ import {
   ingestCelesTrak,
   listSatellites,
   type ContactWindowParams,
+  type OrbitTrackParams,
   type SimulationParams,
 } from './api';
 import type {
   ContactWindowListResponse,
   OpsPolicyComparisonResponse,
+  OrbitTrackResponse,
   SatelliteListResponse,
   SatellitePositionResponse,
   SatelliteRecord,
@@ -26,6 +31,45 @@ import type {
 const ISS_NORAD_ID = 25544;
 const telemetryScenarios = ['nominal', 'thermal_drift', 'power_drop', 'comms_degradation'];
 const opsPolicies = ['conservative_ops', 'balanced_ops', 'relaxed_ops'];
+
+
+type CatalogLoadMode = 'none' | 'cache' | 'ingest-cache' | 'force-refresh' | 'error-cache-available';
+
+interface CatalogStatusState {
+  mode: CatalogLoadMode;
+  totalRecords: number;
+  visibleRecords: number;
+  lastIngestedAt?: string;
+  message: string;
+}
+
+function buildCatalogStatus(response: SatelliteListResponse, mode: CatalogLoadMode): CatalogStatusState {
+  const ingestedTimes = response.items
+    .map((item) => item.ingested_at)
+    .filter(Boolean)
+    .sort();
+  const lastIngestedAt = ingestedTimes.length > 0 ? ingestedTimes[ingestedTimes.length - 1] : undefined;
+  const sourceLabel = mode === 'force-refresh' ? 'refreshed from CelesTrak' : mode === 'ingest-cache' ? 'ingest / cached catalog' : 'cached catalog';
+  return {
+    mode,
+    totalRecords: response.count,
+    visibleRecords: response.items.length,
+    lastIngestedAt,
+    message: `${response.count.toLocaleString()} records loaded · ${sourceLabel}`,
+  };
+}
+
+function friendlyCatalogError(error: unknown, cachedCount: number): string {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const lower = rawMessage.toLowerCase();
+  if (lower.includes('celestrak') && (lower.includes('403') || lower.includes('502') || lower.includes('bad gateway'))) {
+    const cacheHint = cachedCount > 0
+      ? ` The cached catalog is still available (${cachedCount.toLocaleString()} records). Use "Load cached catalog" and retry refresh later.`
+      : ' No cached catalog is loaded in the UI yet; try "Load cached catalog" if local cache exists.';
+    return `CelesTrak rejected a repeated public-catalog download because the source may not have updated yet.${cacheHint}`;
+  }
+  return rawMessage;
+}
 
 const groundStationPresets = [
   {
@@ -184,14 +228,155 @@ function MissionMap({
   );
 }
 
+function kmToScene(value: { x: number; y: number; z: number }): [number, number, number] {
+  const scale = 1 / 2200;
+  return [value.x * scale, value.z * scale, -value.y * scale];
+}
+
+function OrbitPlaybackScene({ track, currentIndex }: { track: OrbitTrackResponse | null; currentIndex: number }) {
+  const orbitPoints = useMemo(() => track?.points.map((point) => kmToScene(point.position_km)) ?? [], [track]);
+  const markerPoint = orbitPoints[Math.min(currentIndex, Math.max(orbitPoints.length - 1, 0))];
+
+  return (
+    <Canvas camera={{ position: [0, 0, 8], fov: 46 }}>
+      <ambientLight intensity={0.65} />
+      <directionalLight position={[4, 3, 5]} intensity={1.2} />
+      <mesh>
+        <sphereGeometry args={[2.9, 48, 48]} />
+        <meshStandardMaterial color="#102647" roughness={0.7} metalness={0.05} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[2.93, 48, 48]} />
+        <meshBasicMaterial color="#2f80ed" wireframe transparent opacity={0.18} />
+      </mesh>
+      <Line points={[[-3.4, 0, 0], [3.4, 0, 0]]} color="#64748b" lineWidth={1} transparent opacity={0.45} />
+      {orbitPoints.length > 1 ? <Line points={orbitPoints} color="#7dd3fc" lineWidth={2} /> : null}
+      {markerPoint ? (
+        <mesh position={markerPoint}>
+          <sphereGeometry args={[0.12, 24, 24]} />
+          <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={0.8} />
+        </mesh>
+      ) : null}
+      <OrbitControls enablePan={false} minDistance={5} maxDistance={12} />
+    </Canvas>
+  );
+}
+
+function OrbitPlaybackCard({
+  selectedId,
+  track,
+  trackParams,
+  currentIndex,
+  isPlaying,
+  playbackSpeed,
+  onTrackParamsChange,
+  onLoadTrack,
+  onSetCurrentIndex,
+  onTogglePlaying,
+  onReset,
+  onPlaybackSpeedChange,
+}: {
+  selectedId: number | null;
+  track: OrbitTrackResponse | null;
+  trackParams: OrbitTrackParams;
+  currentIndex: number;
+  isPlaying: boolean;
+  playbackSpeed: number;
+  onTrackParamsChange: (params: OrbitTrackParams) => void;
+  onLoadTrack: () => void;
+  onSetCurrentIndex: (index: number) => void;
+  onTogglePlaying: () => void;
+  onReset: () => void;
+  onPlaybackSpeedChange: (speed: number) => void;
+}) {
+  const currentPoint = track?.points[currentIndex] ?? null;
+  const maxIndex = Math.max((track?.points.length ?? 1) - 1, 0);
+
+  return (
+    <section className="card orbit-card">
+      <div className="section-eyebrow">Approximate 3D orbit playback</div>
+      <h2>Local globe and SGP4-derived track</h2>
+      <p>
+        This visualization samples public orbit elements through the local SGP4 approximation and renders a
+        procedural globe in the browser. It does not use Cesium, Cesium Ion tokens, external map services, live tracking,
+        or mission-grade flight dynamics validation.
+      </p>
+      <div className="orbit-layout">
+        <div className="orbit-canvas" aria-label="Approximate 3D orbit playback globe">
+          <OrbitPlaybackScene track={track} currentIndex={currentIndex} />
+        </div>
+        <div className="orbit-controls">
+          <div className="form-grid compact-form-grid">
+            <label>Start<input type="datetime-local" value={trackParams.start} onChange={(e) => onTrackParamsChange({ ...trackParams, start: e.target.value })} /></label>
+            <label>End<input type="datetime-local" value={trackParams.end} onChange={(e) => onTrackParamsChange({ ...trackParams, end: e.target.value })} /></label>
+            <label>Step seconds<input type="number" value={trackParams.step_seconds} onChange={(e) => onTrackParamsChange({ ...trackParams, step_seconds: Number(e.target.value) })} /></label>
+          </div>
+          <button disabled={!selectedId} onClick={onLoadTrack}>Load orbit track</button>
+          {track ? (
+            <>
+              <div className="button-row playback-buttons">
+                <button onClick={onTogglePlaying}>{isPlaying ? 'Pause' : 'Play'}</button>
+                <button className="secondary" onClick={onReset}>Reset</button>
+                <label className="speed-control">Speed
+                  <select value={playbackSpeed} onChange={(e) => onPlaybackSpeedChange(Number(e.target.value))}>
+                    <option value={0.5}>0.5x</option>
+                    <option value={1}>1x</option>
+                    <option value={2}>2x</option>
+                    <option value={4}>4x</option>
+                  </select>
+                </label>
+              </div>
+              <label className="scrub-control">
+                Playback frame
+                <input type="range" min={0} max={maxIndex} value={currentIndex} onChange={(e) => onSetCurrentIndex(Number(e.target.value))} />
+              </label>
+              <div className="facts-grid orbit-readout">
+                <div><span className="label">Samples</span><strong>{track.sample_count}</strong></div>
+                <div><span className="label">Frame</span><strong>{currentIndex + 1} / {track.sample_count}</strong></div>
+                <div><span className="label">Current time</span><strong>{formatDate(currentPoint?.timestamp)}</strong></div>
+                <div><span className="label">Altitude</span><strong>{formatNumber(currentPoint?.approximate_geodetic.altitude_km, 1)} km</strong></div>
+                <div><span className="label">Latitude</span><strong>{formatNumber(currentPoint?.approximate_geodetic.latitude_deg)}°</strong></div>
+                <div><span className="label">Longitude</span><strong>{formatNumber(currentPoint?.approximate_geodetic.longitude_deg)}°</strong></div>
+              </div>
+              <div className="orbit-legend">
+        <strong>Approximate SGP4-derived path · public CelesTrak orbit elements · not live tracking</strong>
+        <span>
+          Marker shows the selected playback frame. The path is sampled from the start/end/step controls; altitude scaling is visual context, not a flight-dynamics claim.
+        </span>
+      </div>
+      <p className="hint">{track.limitations.join(' · ')}</p>
+            </>
+          ) : <p className="hint">Load a bounded track to see approximate playback over the selected public orbit record.</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function App() {
   const [health, setHealth] = useState('checking');
   const [satellites, setSatellites] = useState<SatelliteRecord[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState<CatalogStatusState>({
+    mode: 'none',
+    totalRecords: 0,
+    visibleRecords: 0,
+    message: 'No catalog loaded yet.',
+  });
+  const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<SatelliteRecord | null>(null);
   const [search, setSearch] = useState('');
   const [positionAt, setPositionAt] = useState(toDatetimeLocalValue(new Date()));
   const [position, setPosition] = useState<SatellitePositionResponse | null>(null);
+  const [orbitTrack, setOrbitTrack] = useState<OrbitTrackResponse | null>(null);
+  const [orbitTrackParams, setOrbitTrackParams] = useState<OrbitTrackParams>(() => {
+    const now = new Date();
+    const end = new Date(now.getTime() + 90 * 60_000);
+    return { start: toDatetimeLocalValue(now), end: toDatetimeLocalValue(end), step_seconds: 180 };
+  });
+  const [orbitFrame, setOrbitFrame] = useState(0);
+  const [orbitPlaying, setOrbitPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [contactWindows, setContactWindows] = useState<ContactWindowListResponse | null>(null);
   const [simulation, setSimulation] = useState<SimulationParams>({
     scenario: 'thermal_drift',
@@ -217,15 +402,16 @@ export default function App() {
     };
   });
 
-  const filteredSatellites = useMemo(() => {
+  const matchingSatellites = useMemo(() => {
     const normalized = search.trim().toLowerCase();
-    const list = normalized
+    return normalized
       ? satellites.filter((item) =>
           `${item.object_name} ${item.norad_cat_id} ${item.object_id ?? ''}`.toLowerCase().includes(normalized),
         )
       : satellites;
-    return list.slice(0, 80);
   }, [satellites, search]);
+
+  const filteredSatellites = useMemo(() => matchingSatellites.slice(0, 80), [matchingSatellites]);
 
   const latestSubsystemSamples = useMemo(() => {
     if (!telemetry) return [];
@@ -241,19 +427,25 @@ export default function App() {
     setError(null);
     try {
       const response = await listSatellites();
-      applySatelliteList(response);
+      applySatelliteList(response, 'cache');
+      setCatalogNotice(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyCatalogError(err, satellites.length));
     } finally {
       setBusy(null);
     }
   }
 
-  function applySatelliteList(response: SatelliteListResponse) {
+  function applySatelliteList(response: SatelliteListResponse, mode: CatalogLoadMode) {
     setSatellites(response.items);
+    setCatalogStatus(buildCatalogStatus(response, mode));
     if (response.items.length > 0) {
       const preferred = response.items.find((item) => item.norad_cat_id === ISS_NORAD_ID) ?? response.items[0];
-      setSelectedId((current) => current ?? preferred.norad_cat_id);
+      setSelectedId((current) => {
+        if (current && response.items.some((item) => item.norad_cat_id === current)) return current;
+        return preferred.norad_cat_id;
+      });
+      setCatalogNotice('Catalog refreshed; selected satellite and derived panels are preserved when the selected NORAD ID remains in the catalog. Recompute derived panels only if you changed parameters.');
     }
   }
 
@@ -262,9 +454,16 @@ export default function App() {
     setError(null);
     try {
       const response = await ingestCelesTrak(force);
-      applySatelliteList(response);
+      applySatelliteList(response, force ? 'force-refresh' : 'ingest-cache');
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyCatalogError(err, satellites.length));
+      if (satellites.length > 0) {
+        setCatalogStatus((current) => ({
+          ...current,
+          mode: 'error-cache-available',
+          message: `${current.totalRecords.toLocaleString()} cached records remain available · CelesTrak refresh limited`,
+        }));
+      }
     } finally {
       setBusy(null);
     }
@@ -276,6 +475,26 @@ export default function App() {
     setError(null);
     try {
       setPosition(await getPosition(selectedId, datetimeLocalToIso(positionAt)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function requestOrbitTrack() {
+    if (!selectedId) return;
+    setBusy('Sampling approximate orbit track');
+    setError(null);
+    try {
+      const response = await getOrbitTrack(selectedId, {
+        start: datetimeLocalToIso(orbitTrackParams.start),
+        end: datetimeLocalToIso(orbitTrackParams.end),
+        step_seconds: orbitTrackParams.step_seconds,
+      });
+      setOrbitTrack(response);
+      setOrbitFrame(0);
+      setOrbitPlaying(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -330,6 +549,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!orbitPlaying || !orbitTrack || orbitTrack.points.length < 2) return;
+    const interval = window.setInterval(() => {
+      setOrbitFrame((current) => (current >= orbitTrack.points.length - 1 ? 0 : current + 1));
+    }, Math.max(120, 700 / playbackSpeed));
+    return () => window.clearInterval(interval);
+  }, [orbitPlaying, orbitTrack, playbackSpeed]);
+
+  useEffect(() => {
     if (selectedId === null) {
       setSelected(null);
       return;
@@ -337,19 +564,25 @@ export default function App() {
     getSatellite(selectedId)
       .then(setSelected)
       .catch(() => setSelected(satellites.find((item) => item.norad_cat_id === selectedId) ?? null));
+  }, [selectedId, satellites]);
+
+  useEffect(() => {
     setPosition(null);
+    setOrbitTrack(null);
+    setOrbitFrame(0);
+    setOrbitPlaying(false);
     setContactWindows(null);
     setTelemetry(null);
     setEventWorkflow(null);
     setPolicyComparison(null);
-  }, [selectedId, satellites]);
+  }, [selectedId]);
 
   return (
     <main className="app-shell">
       <header className="hero">
         <div>
           <div className="section-eyebrow">Mission Ops Lite</div>
-          <h1>Operator dashboard for public orbit-derived planning</h1>
+          <h1>Mission data review dashboard for public orbit-derived planning</h1>
           <p>
             Review public catalog ingestion, freshness, approximate SGP4 position, and estimated
             ground-station contact windows from the local backend.
@@ -361,7 +594,12 @@ export default function App() {
         </div>
       </header>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error ? (
+        <div className="error-banner">
+          <span>{error}</span>
+          {error.includes('CelesTrak') ? <button className="secondary inline-action" onClick={loadCatalog}>Load cached catalog</button> : null}
+        </div>
+      ) : null}
       {busy ? <div className="busy-banner">{busy}…</div> : null}
 
       <div className="dashboard-grid">
@@ -375,6 +613,15 @@ export default function App() {
             <button onClick={() => refreshIngest(false)}>Ingest / use cache</button>
             <button className="secondary" onClick={() => refreshIngest(true)}>Force refresh</button>
           </div>
+          <div className="catalog-status">
+            <strong>{catalogStatus.message}</strong>
+            <span>
+              Visible matches: {matchingSatellites.length.toLocaleString()} / {catalogStatus.totalRecords.toLocaleString()}
+              {catalogStatus.lastIngestedAt ? ` · last ingested ${formatDate(catalogStatus.lastIngestedAt)}` : ''}
+            </span>
+            <span>Source: CelesTrak public GP active · mode: {catalogStatus.mode}</span>
+          </div>
+          {catalogNotice ? <p className="hint preserve-note">{catalogNotice}</p> : null}
           <label>
             Search satellite name, NORAD ID, or object ID
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ISS, 25544, STARLINK" />
@@ -390,7 +637,10 @@ export default function App() {
                 <strong>{item.norad_cat_id}</strong>
               </button>
             ))}
-            {filteredSatellites.length === 0 ? <p className="hint">No catalog rows loaded yet. Run ingest first.</p> : null}
+            {filteredSatellites.length === 0 && satellites.length === 0 ? <p className="hint">No catalog rows loaded yet. Run ingest first or load the cached catalog.</p> : null}
+            {filteredSatellites.length === 0 && satellites.length > 0 ? (
+              <p className="hint">No matches for "{search}" in {satellites.length.toLocaleString()} loaded records. Try another object name or NORAD catalog ID.</p>
+            ) : null}
           </div>
         </section>
 
@@ -429,6 +679,27 @@ export default function App() {
           ) : <p className="hint">Position is calculated on demand from the selected public orbit record.</p>}
         </section>
 
+        <OrbitPlaybackCard
+          selectedId={selectedId}
+          track={orbitTrack}
+          trackParams={orbitTrackParams}
+          currentIndex={orbitFrame}
+          isPlaying={orbitPlaying}
+          playbackSpeed={playbackSpeed}
+          onTrackParamsChange={setOrbitTrackParams}
+          onLoadTrack={requestOrbitTrack}
+          onSetCurrentIndex={(index) => {
+            setOrbitFrame(index);
+            setOrbitPlaying(false);
+          }}
+          onTogglePlaying={() => setOrbitPlaying((current) => !current)}
+          onReset={() => {
+            setOrbitFrame(0);
+            setOrbitPlaying(false);
+          }}
+          onPlaybackSpeedChange={setPlaybackSpeed}
+        />
+
         <section className="card contact-card">
           <div className="section-eyebrow">Contact windows</div>
           <h2>Ground-station estimate</h2>
@@ -454,7 +725,7 @@ export default function App() {
             <label>Min elevation<input type="number" value={station.min_elevation_deg} onChange={(e) => setStation({ ...station, min_elevation_deg: Number(e.target.value) })} /></label>
           </div>
           <button disabled={!selectedId} onClick={requestContactWindows}>Estimate contact windows</button>
-          {contactWindows ? (
+          {contactWindows && contactWindows.count > 0 ? (
             <table>
               <thead><tr><th>Start</th><th>End</th><th>Peak</th><th>Duration</th><th>Max elev.</th></tr></thead>
               <tbody>
@@ -469,6 +740,15 @@ export default function App() {
                 ))}
               </tbody>
             </table>
+          ) : contactWindows && contactWindows.count === 0 ? (
+            <div className="zero-state">
+              <strong>No estimated contact windows for this time range and minimum elevation.</strong>
+              <p>
+                Station: {contactWindows.ground_station.name} · {formatDate(contactWindows.start)} to {formatDate(contactWindows.end)} · min elevation {formatNumber(contactWindows.min_elevation_deg)}°.
+                Try a longer time range, lower min elevation, or another ground station.
+              </p>
+              <p className="hint">This estimate does not model RF link budget, terrain, weather, antenna masks, scheduling conflicts, or operations constraints.</p>
+            </div>
           ) : <p className="hint">Contact windows are sampled estimates and are not stored by the backend.</p>}
         </section>
 

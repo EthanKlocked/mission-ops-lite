@@ -82,6 +82,7 @@ th { color: #9fb3ce; font-weight: 700; }
 .lineage-card { grid-column: span 5; }
 .controls-card { grid-column: span 7; }
 .detail-card, .position-card { grid-column: span 6; }
+.orbit-card { grid-column: 1 / -1; }
 .contact-card { grid-column: span 7; }
 .map-card { grid-column: span 5; }
 .simulation-card { grid-column: span 7; }
@@ -120,7 +121,8 @@ th { color: #9fb3ce; font-weight: 700; }
   margin-bottom: 1rem;
   padding: 0.85rem 1rem;
 }
-.error-banner { background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fecaca; }
+.error-banner { align-items: center; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fecaca; display: flex; gap: 0.75rem; justify-content: space-between; }
+.inline-action { flex: 0 0 auto; padding: 0.45rem 0.75rem; }
 .busy-banner { background: rgba(14, 165, 233, 0.13); border: 1px solid #0ea5e9; color: #bae6fd; }
 
 .lineage-grid, .facts-grid, .map-readout {
@@ -151,7 +153,16 @@ strong { color: #f5f9ff; display: block; overflow-wrap: anywhere; }
 .satellite-row.selected { border-color: #6ee7f9; box-shadow: 0 0 0 1px #6ee7f9 inset; }
 
 .form-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0.75rem 0; }
+.compact-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .hint { color: #8198b5; font-size: 0.9rem; }
+.orbit-layout { display: grid; gap: 1rem; grid-template-columns: minmax(360px, 1.25fr) minmax(320px, 0.75fr); }
+.orbit-canvas { background: radial-gradient(circle at 50% 45%, rgba(14, 165, 233, 0.16), rgba(3, 7, 18, 0.96) 68%); border: 1px solid #2a4967; border-radius: 1rem; height: 460px; overflow: hidden; }
+.orbit-controls { align-self: stretch; }
+.playback-buttons { align-items: center; margin-top: 1rem; }
+.speed-control { min-width: 120px; }
+.scrub-control { margin: 0.8rem 0; }
+.scrub-control input { accent-color: #6ee7f9; }
+.orbit-readout { margin-top: 0.85rem; }
 .telemetry-meta { margin: 1rem 0; }
 .health-tile-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top: 1rem; }
 .health-tile { background: #0d2037; border: 1px solid #243b56; border-radius: 1rem; padding: 0.85rem; }
@@ -203,7 +214,20 @@ strong { color: #f5f9ff; display: block; overflow-wrap: anywhere; }
   .app-shell { padding: 1rem; }
   .hero { flex-direction: column; }
   .status-stack { align-items: flex-start; }
-  .lineage-card, .controls-card, .detail-card, .position-card, .contact-card, .map-card, .simulation-card, .event-card, .policy-card { grid-column: 1 / -1; }
-  .form-grid { grid-template-columns: 1fr; }
+  .lineage-card, .controls-card, .detail-card, .position-card, .orbit-card, .contact-card, .map-card, .simulation-card, .event-card, .policy-card { grid-column: 1 / -1; }
+  .form-grid, .compact-form-grid { grid-template-columns: 1fr; }
+  .orbit-layout { grid-template-columns: 1fr; }
+  .orbit-canvas { height: 360px; }
   table { display: block; overflow-x: auto; }
 }
+
+.catalog-status, .zero-state, .orbit-legend {
+  background: rgba(14, 165, 233, 0.09);
+  border: 1px solid #1f5e7c;
+  border-radius: 0.95rem;
+  margin: 0.75rem 0;
+  padding: 0.8rem;
+}
+.catalog-status span, .orbit-legend span { color: #aebfd5; display: block; font-size: 0.84rem; margin-top: 0.25rem; }
+.preserve-note { margin-top: 0.4rem; }
+.zero-state p { margin: 0.4rem 0 0; }
