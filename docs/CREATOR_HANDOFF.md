@@ -38,3 +38,18 @@ Scope implemented on stacked branch `feat/simulated-telemetry-events` from `feat
 PR 6 non-goals:
 
 - No live spacecraft telemetry, RF/downlink, command/control, paid APIs, secrets, deployment, or mission-grade validation claim.
+
+## PR 9 Approximate 3D Orbit Playback
+
+Source direction received from SpaceOps Mentor/user in chat: PR #9 is Three.js/React Three Fiber based approximate 3D orbit playback.
+
+Scope:
+
+- Reuse existing SGP4 propagation to expose `GET /satellites/{norad_cat_id}/orbit-track`.
+- Return bounded sampled track points with timestamps, TEME position/velocity, approximate geodetic position, source lineage, and limitations.
+- Add dashboard 3D globe, orbit path, moving satellite marker, playback controls, speed control, and frame scrubber.
+- Use local Three.js/React Three Fiber rendering only.
+
+PR 9 non-goals:
+
+- No Cesium, Cesium Ion token, external map service, live tracking claim, or mission-grade flight dynamics validation claim.

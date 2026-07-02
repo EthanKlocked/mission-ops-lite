@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from math import atan2, cos, degrees, pi, radians, sin, sqrt
 from typing import Any
 
@@ -35,6 +35,90 @@ class SGP4PositionEstimate:
     approximate_geodetic: dict[str, float]
     freshness_status: str
     epoch_age_hours: float | None
+
+
+@dataclass(frozen=True)
+class OrbitTrackPoint:
+    sequence: int
+    timestamp: datetime
+    position_km: dict[str, float]
+    velocity_km_s: dict[str, float]
+    approximate_geodetic: dict[str, float]
+
+
+@dataclass(frozen=True)
+class OrbitTrackEstimate:
+    object_name: str
+    norad_cat_id: int
+    source_epoch: datetime
+    start: datetime
+    end: datetime
+    step_seconds: int
+    freshness_status: str
+    epoch_age_hours: float | None
+    points: list[OrbitTrackPoint]
+
+
+class OrbitTrackInputError(ValueError):
+    """Raised when orbit-track request parameters are invalid."""
+
+
+def parse_orbit_track_bounds(start: str, end: str) -> tuple[datetime, datetime]:
+    parsed_start = parse_requested_at(start)
+    parsed_end = parse_requested_at(end)
+    if parsed_end <= parsed_start:
+        raise OrbitTrackInputError("end must be after start")
+    return parsed_start, parsed_end
+
+
+def estimate_orbit_track(
+    record: SatelliteOrbitRecord,
+    *,
+    start: datetime,
+    end: datetime,
+    step_seconds: int,
+    max_samples: int = 360,
+) -> OrbitTrackEstimate:
+    """Sample an approximate SGP4 orbit track for local 3D visualization."""
+
+    if step_seconds <= 0:
+        raise OrbitTrackInputError("step_seconds must be positive")
+    total_seconds = (end - start).total_seconds()
+    sample_count = int(total_seconds // step_seconds) + 1
+    if start + timedelta(seconds=step_seconds * (sample_count - 1)) < end:
+        sample_count += 1
+    if sample_count > max_samples:
+        raise OrbitTrackInputError(f"sample count {sample_count} exceeds maximum {max_samples}")
+
+    points: list[OrbitTrackPoint] = []
+    current = start
+    for sequence in range(sample_count):
+        if current > end:
+            current = end
+        estimate = propagate_sgp4_position(record, requested_at=current)
+        points.append(
+            OrbitTrackPoint(
+                sequence=sequence,
+                timestamp=estimate.requested_at,
+                position_km=estimate.position_km,
+                velocity_km_s=estimate.velocity_km_s,
+                approximate_geodetic=estimate.approximate_geodetic,
+            )
+        )
+        current = start + timedelta(seconds=step_seconds * (sequence + 1))
+
+    first = propagate_sgp4_position(record, requested_at=start)
+    return OrbitTrackEstimate(
+        object_name=record.object_name,
+        norad_cat_id=record.norad_cat_id,
+        source_epoch=first.source_epoch,
+        start=start,
+        end=end,
+        step_seconds=step_seconds,
+        freshness_status=first.freshness_status,
+        epoch_age_hours=first.epoch_age_hours,
+        points=points,
+    )
 
 
 def parse_requested_at(value: str | None) -> datetime:

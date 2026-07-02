@@ -75,3 +75,13 @@
 - Policy comparison: the same simulated telemetry stream is run through all policy profiles to show event count/timing/recommendation differences.
 - Dashboard approach: modest extension of the existing operator dashboard with scenario/policy controls, health tiles, event timeline, runbook summary, and policy comparison. No broad redesign.
 - Public wording: use “simulated spacecraft telemetry”, “simulation-backed subsystem health”, “operator-facing event timeline”, and “runbook-style summary”; avoid implying live telemetry, real spacecraft health, mission control, or validated anomaly detection.
+
+## PR 9
+
+- Scope: add approximate 3D orbit playback without changing the public-data boundary.
+- Endpoint: `GET /satellites/{norad_cat_id}/orbit-track?start=...&end=...&step_seconds=...`.
+- Calculation approach: reuse existing SGP4 position propagation and sample a bounded range of points; each point includes sequence, timestamp, TEME position/velocity, and approximate geodetic coordinates.
+- Response framing: “SGP4-derived approximate orbit playback from public orbit elements.”
+- Frontend stack addition: `three`, `@react-three/fiber`, and `@react-three/drei` pinned to React 18-compatible versions.
+- Visualization approach: procedural local globe, orbit path, moving satellite marker, play/pause/reset/speed/scrub controls. No external map or globe service.
+- Explicit non-goals: no Cesium, no Cesium Ion token, no external map service, no live spacecraft tracking claim, no mission-grade flight dynamics validation, and no live telemetry/RF/downlink/telecommand expansion.
