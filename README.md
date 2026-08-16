@@ -306,9 +306,9 @@ curl 'http://127.0.0.1:8000/satellites/25544/events/simulated?scenario=thermal_d
 curl 'http://127.0.0.1:8000/satellites/25544/ops-policy-comparison?scenario=thermal_drift&seed=42'
 ```
 
-## Data platform extension: PySpark, Databricks-style Medallion, and Snowflake OLAP
+## Data platform extension: PySpark Medallion and Snowflake OLAP contracts
 
-This repository also includes a local-first data engineering extension that processes the same public orbit catalog through a Spark/Databricks-style Medallion pipeline and prepares Snowflake-style OLAP mart outputs.
+This repository also includes a local-first data engineering layer that processes the same public orbit catalog through PySpark Bronze/Silver/Gold transforms and prepares SQL contracts for OLAP analysis.
 
 Pipeline shape:
 
@@ -317,7 +317,8 @@ CelesTrak raw GP records
   -> Bronze: raw/source-shaped records with raw JSON and ingestion lineage
   -> Silver: normalized orbit snapshots with typed columns, deduplication, freshness, and quality labels
   -> Gold: OLAP-ready freshness/count metrics
-  -> Snowflake SQL: warehouse/schema/table/load/query contracts for KPI analysis
+  -> Databricks notebook definitions: Bronze/Silver/Gold table materialization structure
+  -> Snowflake SQL contracts: warehouse/schema/table/load/query definitions for KPI analysis
 ```
 
 Key files:
@@ -347,7 +348,7 @@ Run the data-platform tests:
 uv run --extra dev --extra data python -m pytest tests/test_data_platform_medallion.py tests/test_data_platform_sql_notebooks.py -q
 ```
 
-The Databricks notebooks reuse the same transformation functions but call `saveAsTable(...)` for Bronze/Silver/Gold table materialization. The Snowflake SQL files define the OLAP schema, staged Parquet load contract, and analytical freshness/quality queries. Live Databricks/Snowflake workspace execution requires separately approved credentials and cloud configuration.
+The Databricks notebook files are implementation definitions that reuse the same transformation functions and call `saveAsTable(...)` for Bronze/Silver/Gold table materialization. The Snowflake SQL files define the OLAP schema, staged Parquet load contract, and analytical freshness/quality queries. They are pipeline and schema artifacts, not runtime evidence from a live Databricks or Snowflake workspace.
 
 ## Test strategy
 

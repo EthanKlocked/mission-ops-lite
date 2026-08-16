@@ -1,8 +1,8 @@
 # Data Platform Medallion/OLAP Implementation Plan
 
-**Goal:** Add a local-first data engineering layer to Mission Ops Lite that demonstrates Spark/Databricks Medallion Architecture and Snowflake OLAP modeling over public CelesTrak orbit catalog data.
+**Goal:** Add a local-first data engineering layer to Mission Ops Lite that implements PySpark Bronze/Silver/Gold transforms and OLAP SQL contracts over public CelesTrak orbit catalog data.
 
-**Boundary:** This is hands-on project infrastructure, not a live Databricks/Snowflake deployment. No credentials, paid cloud setup, or production claims are included.
+**Boundary:** This is technical data-pipeline infrastructure, not a live Databricks/Snowflake deployment. No credentials, paid cloud setup, or production claims are included.
 
 ## Task 1: Capture data-platform acceptance tests
 
@@ -61,7 +61,7 @@
 - Define a small warehouse/database/schema contract.
 - Define `GOLD_ORBIT_FRESHNESS_METRICS` as the analytical table.
 - Use a Parquet file format and internal stage as a simple load contract.
-- Include freshness/quality KPI queries that are explainable in interviews.
+- Include freshness/quality KPI queries that are directly tied to the Gold metric outputs.
 
 ## Task 5: Update docs and evidence
 

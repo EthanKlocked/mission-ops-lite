@@ -151,6 +151,8 @@ Result:
 
 - Added-line security scan: no hardcoded secret/shell/eval/pickle/SQL-string-format hits.
 - Wording grep only found existing limitation statements that explicitly say the project is not live spacecraft telemetry or mission-grade operations.
+- PR-readiness wording scan after README/plan/decision copy refresh: `git grep -n -i 'interview\|learning\|portfolio\|포트폴리오\|면접\|학습' -- README.md docs/IMPLEMENTATION_PLAN_DATA_PLATFORM.md docs/DECISIONS.md || true` returned no matches.
+- Databricks/Snowflake phrasing was kept to pipeline/table/schema/load/query definitions and explicit non-runtime limitations, not operation claims.
 
 ## Limitations remaining
 
@@ -474,5 +476,5 @@ Observed flow:
 
 ### Public wording/framing scan
 
-Public-facing wording scan was run before final commit preparation. Internal docs may mention career/portfolio context, but README/source/frontend public-facing wording keeps the artifact framed as a standalone technical project with explicit simulated/not-live limitations.
+Public-facing wording scan was run before final commit preparation. README/source/frontend public-facing wording keeps the repository framed as a standalone technical project with explicit simulated/not-live limitations.
 

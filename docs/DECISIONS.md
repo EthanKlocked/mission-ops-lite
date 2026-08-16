@@ -95,7 +95,7 @@
 
 ## Data Platform Medallion / OLAP candidate
 
-- Scope: add a credential-free data platform extension that demonstrates Databricks-style Medallion Architecture and Snowflake OLAP modeling over the existing public CelesTrak orbit catalog domain.
+- Scope: add a credential-free data platform extension with PySpark Bronze/Silver/Gold transforms and Snowflake OLAP schema/load/query contracts over the existing public CelesTrak orbit catalog domain.
 - Dependency split: `pyspark` is optional under the `data` extra and Snowflake connector is optional under the `cloud` extra so the core API/dashboard remains lightweight.
 - Transform design: shared PySpark functions live in `mission_ops_lite.data_platform.medallion`; local tests and Databricks notebooks reuse the same logic instead of duplicating business rules.
 - Bronze layer: preserve source-shaped fields, raw source JSON, CelesTrak source metadata, ingestion timestamp, and ingestion date for replay/traceability.
@@ -103,4 +103,4 @@
 - Gold layer: produce small OLAP-ready freshness/quality metrics suitable for Snowflake loading and KPI queries.
 - Databricks artifacts: notebook-style Python files use workspace `spark`, read/write tables, and call `saveAsTable`; they are implementation templates rather than a claim that a live workspace is configured.
 - Snowflake artifacts: SQL files define schema/table/stage/load/query contracts without credentials or account-specific secrets.
-- Public wording: describe this as hands-on/local-first data engineering practice. Do not imply production Databricks/Snowflake operation, live spacecraft telemetry, or managed cloud deployment.
+- Public wording: describe this as a local-first technical data engineering layer. Do not imply production Databricks/Snowflake operation, live spacecraft telemetry, managed cloud deployment, or employment-positioning claims.
