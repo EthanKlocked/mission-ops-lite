@@ -8,8 +8,8 @@
 
 **Files:**
 
-- `tests/test_pr10_data_platform_medallion.py`
-- `tests/test_pr10_data_platform_artifacts.py`
+- `tests/test_data_platform_medallion.py`
+- `tests/test_data_platform_sql_notebooks.py`
 
 **Expected coverage:**
 
@@ -75,7 +75,7 @@
 **Verification:**
 
 ```bash
-uv run --extra dev --extra data python -m pytest tests/test_pr10_data_platform_medallion.py tests/test_pr10_data_platform_artifacts.py -q
+uv run --extra dev --extra data python -m pytest tests/test_data_platform_medallion.py tests/test_data_platform_sql_notebooks.py -q
 uv run --extra data python -m mission_ops_lite.data_platform.run_local_medallion --input-json data/sample/celestrak_active_gp_sample.json --output-root data/medallion
 uv run --extra dev python -m pytest -q
 ```

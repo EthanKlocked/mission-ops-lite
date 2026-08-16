@@ -8,7 +8,7 @@ The current system ingests public CelesTrak active GP orbit metadata, normalizes
 
 - A mission-data modeling backend.
 - A public satellite/orbit catalog ingestion service using CelesTrak GP JSON.
-- A timestamp-lineage demonstration that separates source event time from ingestion time.
+- Timestamp-lineage handling that separates source event time from ingestion time.
 - An SGP4-derived approximate position API from public orbit elements.
 - An approximate 3D orbit-playback track API for local dashboard visualization.
 - A ground-station visibility/contact-window planning API derived from approximate positions.
@@ -40,7 +40,7 @@ Timestamp fields:
 
 ## Simulated telemetry and event workflow
 
-The telemetry and event workflow in this project is simulation-backed. It is layered on top of public CelesTrak orbit context to demonstrate operational data modeling patterns: subsystem health, timestamp lineage, warning/critical thresholds, event timelines, policy-driven alerting, and runbook-style operator summaries. It does not ingest live spacecraft telemetry and is not suitable for mission operations.
+The telemetry and event workflow in this project is simulation-backed. It is layered on top of public CelesTrak orbit context to implement operational data modeling patterns: subsystem health, timestamp lineage, warning/critical thresholds, event timelines, policy-driven alerting, and runbook-style operator summaries. It does not ingest live spacecraft telemetry and is not suitable for mission operations.
 
 Implemented scenarios:
 
@@ -186,7 +186,7 @@ Important framing:
 Example:
 
 ```bash
-curl 'http://127.0.0.1:8000/satellites/25544/contact-windows?ground_station_name=Pacific%20demo%20station&latitude_deg=8.45&longitude_deg=-106.20&altitude_m=0&start=2026-05-28T02:45:00Z&end=2026-05-28T03:20:00Z&step_seconds=30&min_elevation_deg=10'
+curl 'http://127.0.0.1:8000/satellites/25544/contact-windows?ground_station_name=Pacific%20ground%20station&latitude_deg=8.45&longitude_deg=-106.20&altitude_m=0&start=2026-05-28T02:45:00Z&end=2026-05-28T03:20:00Z&step_seconds=30&min_elevation_deg=10'
 ```
 
 ### `GET /satellites/{norad_cat_id}/telemetry/simulated?...`
@@ -308,7 +308,7 @@ curl 'http://127.0.0.1:8000/satellites/25544/ops-policy-comparison?scenario=ther
 
 ## Data platform extension: PySpark, Databricks-style Medallion, and Snowflake OLAP
 
-This repository also includes a local-first data engineering extension that models how the same public orbit catalog could move through a Databricks/Spark Medallion pipeline and into a Snowflake-style OLAP mart.
+This repository also includes a local-first data engineering extension that processes the same public orbit catalog through a Spark/Databricks-style Medallion pipeline and prepares Snowflake-style OLAP mart outputs.
 
 Pipeline shape:
 
@@ -344,10 +344,10 @@ uv run --extra data python -m mission_ops_lite.data_platform.run_local_medallion
 Run the data-platform tests:
 
 ```bash
-uv run --extra dev --extra data python -m pytest tests/test_pr10_data_platform_medallion.py tests/test_pr10_data_platform_artifacts.py -q
+uv run --extra dev --extra data python -m pytest tests/test_data_platform_medallion.py tests/test_data_platform_sql_notebooks.py -q
 ```
 
-The Databricks notebooks reuse the same transformation functions but call `saveAsTable(...)` for Bronze/Silver/Gold table materialization. The Snowflake SQL files are intentionally credential-free artifacts: they define the OLAP schema, staged Parquet load contract, and analytical freshness/quality queries. Live Databricks/Snowflake workspace execution requires separately approved credentials and cloud configuration.
+The Databricks notebooks reuse the same transformation functions but call `saveAsTable(...)` for Bronze/Silver/Gold table materialization. The Snowflake SQL files define the OLAP schema, staged Parquet load contract, and analytical freshness/quality queries. Live Databricks/Snowflake workspace execution requires separately approved credentials and cloud configuration.
 
 ## Test strategy
 
@@ -364,7 +364,7 @@ The tests mock the CelesTrak HTTP response through `httpx.MockTransport`, so the
 - Simulated event workflow thresholding, warning/critical event payloads, policy validation, and runbook-style summaries.
 - Operations-policy comparison across conservative, balanced, and relaxed profiles using the same simulated telemetry stream.
 - Frontend build verification for the local operator dashboard.
-- Data-platform extension behavior: PySpark Bronze raw lineage preservation, Silver typed/deduplicated orbit snapshots, Gold OLAP freshness metrics, Databricks notebook reuse of shared transforms, and Snowflake OLAP SQL artifacts.
+- Data-platform extension behavior: PySpark Bronze raw lineage preservation, Silver typed/deduplicated orbit snapshots, Gold OLAP freshness metrics, Databricks notebook reuse of shared transforms, and Snowflake OLAP SQL definitions.
 
 ## Dashboard workflow
 

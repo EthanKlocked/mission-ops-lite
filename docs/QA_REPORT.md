@@ -79,7 +79,7 @@ Follow-up actions from QA were addressed by adding mocked end-to-end ingestion A
 ### TDD red checks
 
 ```bash
-uv run --extra dev --extra data python -m pytest tests/test_pr10_data_platform_medallion.py tests/test_pr10_data_platform_artifacts.py -q
+uv run --extra dev --extra data python -m pytest tests/test_data_platform_medallion.py tests/test_data_platform_sql_notebooks.py -q
 ```
 
 Initial results:
@@ -91,7 +91,7 @@ Initial results:
 ### Targeted data-platform tests
 
 ```bash
-uv run --extra dev --extra data python -m pytest tests/test_pr10_data_platform_medallion.py tests/test_pr10_data_platform_artifacts.py -q
+uv run --extra dev --extra data python -m pytest tests/test_data_platform_medallion.py tests/test_data_platform_sql_notebooks.py -q
 ```
 
 Result:
