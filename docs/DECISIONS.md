@@ -87,13 +87,13 @@
 - UI dogfood stabilization: catalog status feedback, search no-match state, reviewer-friendly CelesTrak source-limit copy with cached-data CTA, contact-window zero-state, derived-panel preservation note, and screenshot-safe orbit legend.
 - Explicit non-goals: no Cesium, no Cesium Ion token, no external map service, no live spacecraft tracking claim, no mission-grade flight dynamics validation, and no live telemetry/RF/downlink/telecommand expansion.
 
-## PR 10
+## PR #10 — Frontend audit lockfile cleanup
 
 - Scope: frontend audit lockfile cleanup after PR #9.
 - Updated transitive `nanoid` and `postcss` lockfile entries through `npm audit fix` without feature changes.
 - Verification: backend tests and frontend build passed in CI; local frontend audit reported 0 vulnerabilities.
 
-## Data platform / Medallion candidate
+## Data Platform Medallion / OLAP candidate
 
 - Scope: add a credential-free data platform extension that demonstrates Databricks-style Medallion Architecture and Snowflake OLAP modeling over the existing public CelesTrak orbit catalog domain.
 - Dependency split: `pyspark` is optional under the `data` extra and Snowflake connector is optional under the `cloud` extra so the core API/dashboard remains lightweight.

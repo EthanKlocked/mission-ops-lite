@@ -4,7 +4,7 @@
 
 **Boundary:** This is hands-on project infrastructure, not a live Databricks/Snowflake deployment. No credentials, paid cloud setup, or production claims are included.
 
-## Task 1: Capture PR10 acceptance tests
+## Task 1: Capture data-platform acceptance tests
 
 **Files:**
 

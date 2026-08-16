@@ -74,7 +74,7 @@ Verdict: pass
 
 Follow-up actions from QA were addressed by adding mocked end-to-end ingestion API coverage and documenting CelesTrak repeated-download `403` behavior.
 
-## PR 10 data platform verification
+## Data Platform Medallion / OLAP verification
 
 ### TDD red checks
 
