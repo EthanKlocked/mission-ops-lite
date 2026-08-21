@@ -59,6 +59,10 @@ Simulation outputs are deterministic when the same satellite, scenario, seed, du
 
 Raw CelesTrak records are preserved on internal normalized records for traceability. API responses intentionally do not include `raw_record` unless the caller explicitly requests it on the detail endpoint with `?include_raw=true`.
 
+## Walkthrough and visual overview
+
+See [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) for a local review path and repo-owned screenshots of the catalog, source lineage, derived orbit/contact views, simulation-backed operations workflow, and data-platform flow.
+
 ## Storage and cache
 
 The default local server uses SQLite at:
